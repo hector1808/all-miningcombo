@@ -40,6 +40,7 @@ games:
     enabled: true
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/10799"
     template_file: "games/xenea-wallet.txt"
+    featured_media_id: 337629
 
     title_format: "Xenea Wallet Daily Quiz Answer {{CURRENT_DATE}}"
     slug_format: "xenea-wallet-{{CURRENT_DATE}}"
