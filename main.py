@@ -255,21 +255,35 @@ def rewrite_snapshot_with_openai(cfg, game_key, base_snapshot):
     phrases = ", ".join(cfg["crypto_snapshot"]["required_phrases"])
 
     prompt = f"""
-Rewrite the following cryptocurrency market snapshot for a daily quiz article.
+You are a professional cryptocurrency market editor.
 
-Rules:
-- Preserve all numeric data exactly.
-- Do not add price predictions.
-- Keep a similar two-paragraph or two-bullet format.
-- Make the wording unique for this game key: {game_key}.
-- Focus only on current market conditions.
-- Include these phrases naturally: {phrases}.
-- Output HTML only using <ul><li>...</li></ul>.
+Rewrite the following crypto market update.
 
-Snapshot:
+Requirements:
+
+- Preserve every number exactly as provided.
+- Do not change prices or percentages.
+- Do not invent any information.
+- Do not mention market capitalization.
+- Do not mention trading volume.
+- Do not mention predictions, forecasts, or future price movements.
+- Do not mention the game name, edition, article title, or any branding.
+- Keep exactly two paragraphs:
+  - one for Bitcoin
+  - one for Ethereum
+- Begin each paragraph exactly with the supplied text.
+- After each first sentence, add only ONE short sentence describing the current market trend.
+- Naturally include these phrases:
+  - Bitcoin price
+  - BTC/USDT
+  - Ethereum price
+  - ETH/USDT
+- Return HTML only using two <p> elements.
+
+Input:
+
 {base_snapshot}
 """.strip()
-
     resp = client.responses.create(
         model=cfg["openai"]["model"],
         input=prompt,
