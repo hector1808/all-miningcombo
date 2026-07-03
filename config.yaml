@@ -1,0 +1,62 @@
+timezone: "Asia/Ho_Chi_Minh"
+
+wp:
+  site_url: "https://blog.mexc.com"
+  username_env: "WP_USERNAME"
+  app_password_env: "WP_APP_PASSWORD"
+  author_id: 159
+  language: "en"
+  category_ids: [4687]
+  status: "publish"
+
+google_sheet:
+  sheet_id_env: "GOOGLE_SHEET_ID"
+  worksheet_name: "miningcombo_logs"
+
+openai:
+  model: "gpt-5-nano"
+
+defaults:
+  question_selector: "p.has-text-align-left.wp-block-paragraph"
+  answer_selector: "p.has-text-align-left.wp-block-paragraph"
+
+crypto_snapshot:
+  coingecko_url: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&price_change_percentage=24h"
+  required_phrases:
+    - "Bitcoin price"
+    - "BTC/USDT"
+    - "Ethereum price"
+    - "ETH/USDT"
+    - "Solana (SOL)"
+
+auto_links:
+  "Bitcoin price": "https://www.mexc.com/price/BTC"
+  "Bitcoin price prediction": "https://www.mexc.com/price-prediction/BTC"
+  "Ethereum price": "https://www.mexc.com/price/ETH"
+  "Ethereum price prediction": "https://www.mexc.com/price-prediction/ETH"
+
+games:
+  - game_key: "xenea_wallet"
+    enabled: true
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/10799"
+    template_file: "games/xenea-wallet.txt"
+
+    title_format: "Xenea Wallet Daily Quiz Answer {{CURRENT_DATE}}"
+    slug_format: "xenea-wallet-{{CURRENT_DATE}}"
+    seo_title_format: "Xenea Wallet Quiz Answer {{CURRENT_DATE}}"
+    meta_description_format: "Get the Xenea Wallet daily quiz question and answer for {{CURRENT_DATE}}, including updated crypto market snapshot and key BTC/ETH price context."
+
+    # Optional: nếu game này cần giờ riêng theo GMT+7
+    run_times:
+      - "02:00"
+      - "07:00"
+      - "07:30"
+      - "08:00"
+      - "08:30"
+      - "09:00"
+      - "09:30"
+      - "10:00"
+      - "10:30"
+      - "11:00"
+      - "11:30"
+      - "12:00"
