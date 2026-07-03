@@ -321,6 +321,8 @@ def update_question_answer_only(existing_content, question, answer):
 def create_wp_post(cfg, game_cfg, title, slug, content):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
+    featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
+    
     payload = {
         "title": title,
         "slug": slug,
@@ -330,6 +332,9 @@ def create_wp_post(cfg, game_cfg, title, slug, content):
         "author": cfg["wp"]["author_id"],
         "categories": cfg["wp"]["category_ids"],
     }
+
+    if featured_media_id:
+        payload["featured_media"] = int(featured_media_id)
 
     r = requests.post(
         url,
