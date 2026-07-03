@@ -20,21 +20,35 @@ def load_config():
         return yaml.safe_load(f)
 
 
+def get_env(name):
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing environment variable: {name}")
+    return value
+
+
 def now_local(tz_name):
     return datetime.now(ZoneInfo(tz_name))
 
 
 def target_date_str(tz_name):
-    # Run ngày 03/07 thì publish bài ngày 04/07
     return (now_local(tz_name).date() + timedelta(days=1)).isoformat()
+
+
+def target_date_readable(tz_name):
+    d = now_local(tz_name).date() + timedelta(days=1)
+    return f"{d.strftime('%B')} {d.day}, {d.year}"
 
 
 def current_time_hhmm(tz_name):
     return now_local(tz_name).strftime("%H:%M")
 
 
-def replace_date_vars(text, date_str):
-    return text.replace("{{CURRENT_DATE}}", date_str)
+def replace_date_vars(text, date_str, readable_date=None):
+    text = text.replace("{{CURRENT_DATE}}", date_str)
+    if readable_date:
+        text = text.replace("{{CURRENT_DATE_READABLE}}", readable_date)
+    return text
 
 
 def normalize_slug(slug):
@@ -44,17 +58,19 @@ def normalize_slug(slug):
     return slug.strip("-")
 
 
-def get_env(name):
-    value = os.getenv(name)
+def normalize_answer(value):
     if not value:
-        raise RuntimeError(f"Missing environment variable: {name}")
-    return value
+        return ""
+    value = html.unescape(str(value))
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
 
 
 def wp_headers(cfg):
     username = get_env(cfg["wp"]["username_env"])
     app_password = get_env(cfg["wp"]["app_password_env"])
     token = base64.b64encode(f"{username}:{app_password}".encode()).decode()
+
     return {
         "Authorization": f"Basic {token}",
         "User-Agent": "Mozilla/5.0",
@@ -81,38 +97,52 @@ def get_sheet(cfg):
 
     worksheet_name = cfg["google_sheet"]["worksheet_name"]
 
+    headers = [
+        "target_date",
+        "game_key",
+        "post_id",
+        "post_url",
+        "slug",
+        "source_modified",
+        "question",
+        "answer",
+        "check_answer",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
+
     try:
         ws = sh.worksheet(worksheet_name)
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=worksheet_name, rows=1000, cols=20)
-        ws.append_row([
-            "target_date",
-            "game_key",
-            "post_id",
-            "post_url",
-            "slug",
-            "source_modified",
-            "question",
-            "answer",
-            "status",
-            "created_at",
-            "updated_at",
-        ])
+        ws.append_row(headers)
+        return ws
+
+    existing_headers = ws.row_values(1)
+    missing_headers = [h for h in headers if h not in existing_headers]
+
+    if missing_headers:
+        new_headers = existing_headers + missing_headers
+        ws.update("1:1", [new_headers])
 
     return ws
 
 
 def find_log_row(ws, target_date, game_key):
     records = ws.get_all_records()
+
     for idx, row in enumerate(records, start=2):
         if str(row.get("target_date")) == target_date and str(row.get("game_key")) == game_key:
             return idx, row
+
     return None, None
 
 
 def update_log_row(ws, row_idx, data):
     headers = ws.row_values(1)
     updates = []
+
     for key, value in data.items():
         if key in headers:
             col = headers.index(key) + 1
@@ -120,6 +150,7 @@ def update_log_row(ws, row_idx, data):
                 "range": gspread.utils.rowcol_to_a1(row_idx, col),
                 "values": [[value]],
             })
+
     if updates:
         ws.batch_update(updates)
 
@@ -130,7 +161,11 @@ def append_log_row(ws, data):
 
 
 def fetch_source_page(url):
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+    r = requests.get(
+        url,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=60,
+    )
     r.raise_for_status()
     return r.json()
 
@@ -161,12 +196,17 @@ def extract_question_answer(content_html, game_cfg, cfg):
 
 def fetch_crypto_data(cfg):
     url = cfg["crypto_snapshot"]["coingecko_url"]
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+
+    r = requests.get(
+        url,
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=60,
+    )
     r.raise_for_status()
-    items = r.json()
 
     data = {}
-    for item in items:
+
+    for item in r.json():
         data[item["id"]] = {
             "name": item["name"],
             "symbol": item["symbol"].upper(),
@@ -174,6 +214,7 @@ def fetch_crypto_data(cfg):
             "market_cap": item.get("market_cap"),
             "change_24h": item.get("price_change_percentage_24h"),
         }
+
     return data
 
 
@@ -197,9 +238,12 @@ def make_base_snapshot(crypto_data):
     btc_direction = "up" if btc["change_24h"] >= 0 else "down"
     eth_direction = "up" if eth["change_24h"] >= 0 else "down"
 
+    btc_market_cap = btc["market_cap"] or 0
+    eth_market_cap = eth["market_cap"] or 0
+
     return (
         f"Bitcoin (BTC): ~{fmt_price(btc['price'])}, {btc_direction} {fmt_pct(btc['change_24h'])} in the last 24h. "
-        f"Bitcoin price remains an important market benchmark for BTC/USDT traders, with BTC market cap around ${btc['market_cap']:,.0f}.\n\n"
+        f"Bitcoin price remains an important market benchmark for BTC/USDT traders, with BTC market cap around ${btc_market_cap:,.0f}.\n\n"
         f"Ethereum (ETH): ~{fmt_price(eth['price'])}, {eth_direction} {fmt_pct(eth['change_24h'])} in the last 24h. "
         f"Ethereum price continues to guide ETH/USDT liquidity and broader altcoin sentiment, while Solana (SOL) remains another key asset watched by traders."
     )
@@ -216,11 +260,11 @@ Rewrite the following cryptocurrency market snapshot for a daily quiz article.
 Rules:
 - Preserve all numeric data exactly.
 - Do not add price predictions.
-- Do not mention "price prediction" unless it already appears in the required anchor phrases.
-- Keep a similar two-paragraph format: one paragraph for Bitcoin, one for Ethereum.
+- Keep a similar two-paragraph or two-bullet format.
 - Make the wording unique for this game key: {game_key}.
+- Focus only on current market conditions.
 - Include these phrases naturally: {phrases}.
-- Output HTML only using <p> tags.
+- Output HTML only using <ul><li>...</li></ul>.
 
 Snapshot:
 {base_snapshot}
@@ -247,6 +291,7 @@ def link_text_once_in_soup(soup, phrase, url):
 
         original = str(text_node)
         match = pattern.search(original)
+
         if not match:
             continue
 
@@ -258,9 +303,12 @@ def link_text_once_in_soup(soup, phrase, url):
         a.string = matched
 
         new_nodes = []
+
         if before:
             new_nodes.append(NavigableString(before))
+
         new_nodes.append(a)
+
         if after:
             new_nodes.append(NavigableString(after))
 
@@ -271,7 +319,6 @@ def link_text_once_in_soup(soup, phrase, url):
 def auto_link_html(content_html, cfg):
     soup = BeautifulSoup(content_html, "html.parser")
 
-    # Link phrase dài trước để tránh Bitcoin price ăn mất Bitcoin price prediction
     items = sorted(
         cfg["auto_links"].items(),
         key=lambda x: len(x[0]),
@@ -284,45 +331,72 @@ def auto_link_html(content_html, cfg):
     return str(soup)
 
 
+def update_quiz_answer_block(content_html, game_cfg, question, answer):
+    soup = BeautifulSoup(content_html, "html.parser")
+
+    heading_contains = game_cfg.get("answer_heading_contains", "Quiz Answers Today").lower()
+
+    target_h2 = None
+
+    for h2 in soup.find_all("h2"):
+        h2_text = h2.get_text(" ", strip=True).lower()
+        if heading_contains in h2_text:
+            target_h2 = h2
+            break
+
+    if not target_h2:
+        raise RuntimeError(f"Quiz answer H2 not found: {heading_contains}")
+
+    target_p = target_h2.find_next("p")
+
+    if not target_p:
+        target_p = soup.new_tag("p")
+        target_h2.insert_after(target_p)
+
+    target_p.clear()
+
+    q_label = soup.new_tag("strong")
+    q_label.string = "Question:"
+    target_p.append(q_label)
+    target_p.append(soup.new_tag("br"))
+    target_p.append(question or "Updating soon.")
+
+    target_p.append(soup.new_tag("br"))
+    target_p.append(soup.new_tag("br"))
+
+    a_label = soup.new_tag("strong")
+    a_label.string = "Correct Answer:"
+    target_p.append(a_label)
+    target_p.append(soup.new_tag("br"))
+    target_p.append(answer or "Updating soon.")
+
+    return str(soup)
+
+
 def build_content(game_cfg, cfg, date_str, question, answer, crypto_snapshot_html):
+    readable_date = target_date_readable(cfg["timezone"])
+
     with open(game_cfg["template_file"], "r", encoding="utf-8") as f:
         template = f.read()
 
-    content = replace_date_vars(template, date_str)
-    content = content.replace("{{QUESTION}}", html.escape(question or "Updating soon."))
-    content = content.replace("{{ANSWER}}", html.escape(answer or "Updating soon."))
+    content = replace_date_vars(template, date_str, readable_date)
     content = content.replace("{{CRYPTO_SNAPSHOT}}", crypto_snapshot_html)
 
+    content = update_quiz_answer_block(
+        content_html=content,
+        game_cfg=game_cfg,
+        question=question,
+        answer=answer,
+    )
+
     return auto_link_html(content, cfg)
-
-
-def update_question_answer_only(existing_content, question, answer):
-    soup = BeautifulSoup(existing_content, "html.parser")
-
-    h2s = soup.find_all(["h2", "h3"])
-    for h in h2s:
-        heading = h.get_text(" ", strip=True).lower()
-
-        if heading == "question":
-            p = h.find_next("p")
-            if p:
-                p.clear()
-                p.append(question or "Updating soon.")
-
-        if heading == "answer":
-            p = h.find_next("p")
-            if p:
-                p.clear()
-                p.append(answer or "Updating soon.")
-
-    return str(soup)
 
 
 def create_wp_post(cfg, game_cfg, title, slug, content):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
     featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
-    
+
     payload = {
         "title": title,
         "slug": slug,
@@ -405,11 +479,22 @@ def update_rankmath_meta(cfg, post_id, seo_title, meta_description):
 
 def should_run_game_now(cfg, game_cfg):
     run_times = game_cfg.get("run_times")
+
     if not run_times:
         return True
 
     current = current_time_hhmm(cfg["timezone"])
     return current in run_times
+
+
+def should_update_answer(current_answer, check_answer):
+    current_answer_norm = normalize_answer(current_answer)
+    check_answer_norm = normalize_answer(check_answer)
+
+    if not current_answer_norm:
+        return False
+
+    return current_answer_norm != check_answer_norm
 
 
 def process_game(cfg, ws, game_cfg):
@@ -423,11 +508,13 @@ def process_game(cfg, ws, game_cfg):
 
     game_key = game_cfg["game_key"]
     date_str = target_date_str(cfg["timezone"])
+    readable_date = target_date_readable(cfg["timezone"])
+    timestamp = now_local(cfg["timezone"]).isoformat(timespec="seconds")
 
-    title = replace_date_vars(game_cfg["title_format"], date_str)
-    slug = normalize_slug(replace_date_vars(game_cfg["slug_format"], date_str))
-    seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str)
-    meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str)
+    title = replace_date_vars(game_cfg["title_format"], date_str, readable_date)
+    slug = normalize_slug(replace_date_vars(game_cfg["slug_format"], date_str, readable_date))
+    seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str, readable_date)
+    meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str, readable_date)
 
     print(f"Processing {game_key} for {date_str}")
 
@@ -438,21 +525,34 @@ def process_game(cfg, ws, game_cfg):
     question, answer = extract_question_answer(source_content, game_cfg, cfg)
 
     row_idx, row = find_log_row(ws, date_str, game_key)
-    timestamp = now_local(cfg["timezone"]).isoformat(timespec="seconds")
 
     if not row:
-        print("No sheet log found. Creating new post.")
+        print("No sheet log found. First run for this game/date.")
+
+        initial_check_answer = game_cfg.get("check_answer", "")
+        answer_changed = should_update_answer(answer, initial_check_answer)
 
         crypto_data = fetch_crypto_data(cfg)
         base_snapshot = make_base_snapshot(crypto_data)
         crypto_snapshot_html = rewrite_snapshot_with_openai(cfg, game_key, base_snapshot)
 
+        if answer_changed:
+            publish_question = question
+            publish_answer = answer
+            log_status = "created_with_new_answer"
+            new_check_answer = answer
+        else:
+            publish_question = "Updating soon."
+            publish_answer = "Updating soon."
+            log_status = "created_waiting_answer"
+            new_check_answer = initial_check_answer
+
         content = build_content(
             game_cfg=game_cfg,
             cfg=cfg,
             date_str=date_str,
-            question=question,
-            answer=answer,
+            question=publish_question,
+            answer=publish_answer,
             crypto_snapshot_html=crypto_snapshot_html,
         )
 
@@ -469,40 +569,54 @@ def process_game(cfg, ws, game_cfg):
             "post_url": post_url,
             "slug": slug,
             "source_modified": source_modified,
-            "question": question,
-            "answer": answer,
-            "status": "created",
+            "question": publish_question,
+            "answer": publish_answer,
+            "check_answer": new_check_answer,
+            "status": log_status,
             "created_at": timestamp,
             "updated_at": timestamp,
         })
 
         print(f"Created post {post_id}: {post_url}")
+        print(f"Status: {log_status}")
         return
 
-    print("Sheet log exists. Checking if question/answer changed.")
+    print("Sheet log exists. Checking answer against check_answer from log.")
 
-    old_question = str(row.get("question") or "")
-    old_answer = str(row.get("answer") or "")
-    old_modified = str(row.get("source_modified") or "")
     post_id = str(row.get("post_id") or "").strip()
 
     if not post_id:
         raise RuntimeError(f"Missing post_id in sheet for {game_key} {date_str}")
 
-    if question == old_question and answer == old_answer and source_modified == old_modified:
-        print("No update needed.")
+    sheet_check_answer = row.get("check_answer") or ""
+    answer_changed = should_update_answer(answer, sheet_check_answer)
+
+    if not answer_changed:
+        print("Answer unchanged. No post update needed.")
+
         update_log_row(ws, row_idx, {
-            "status": "checked_no_change",
+            "source_modified": source_modified,
+            "status": "checked_no_new_answer",
             "updated_at": timestamp,
         })
+
         return
 
-    print("Question/answer changed. Updating existing post.")
+    print("New answer detected. Updating existing post.")
 
     existing_post = get_wp_post(cfg, post_id)
-    existing_content = existing_post.get("content", {}).get("raw") or existing_post.get("content", {}).get("rendered", "")
+    existing_content = (
+        existing_post.get("content", {}).get("raw")
+        or existing_post.get("content", {}).get("rendered", "")
+    )
 
-    updated_content = update_question_answer_only(existing_content, question, answer)
+    updated_content = update_quiz_answer_block(
+        content_html=existing_content,
+        game_cfg=game_cfg,
+        question=question,
+        answer=answer,
+    )
+
     updated_content = auto_link_html(updated_content, cfg)
 
     update_wp_post(cfg, post_id, updated_content)
@@ -511,11 +625,13 @@ def process_game(cfg, ws, game_cfg):
         "source_modified": source_modified,
         "question": question,
         "answer": answer,
-        "status": "updated_answer",
+        "check_answer": answer,
+        "status": "updated_with_new_answer",
         "updated_at": timestamp,
     })
 
     print(f"Updated post {post_id}")
+    print("Status: updated_with_new_answer")
 
 
 def main():
