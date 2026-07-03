@@ -245,7 +245,7 @@ def make_base_snapshot(crypto_data):
         f"Bitcoin (BTC): ~{fmt_price(btc['price'])}, {btc_direction} {fmt_pct(btc['change_24h'])} in the last 24h. "
         f"Bitcoin price remains an important market benchmark for BTC/USDT traders, with BTC market cap around ${btc_market_cap:,.0f}.\n\n"
         f"Ethereum (ETH): ~{fmt_price(eth['price'])}, {eth_direction} {fmt_pct(eth['change_24h'])} in the last 24h. "
-        f"Ethereum price continues to guide ETH/USDT liquidity and broader altcoin sentiment, while Solana (SOL) remains another key asset watched by traders."
+        f"Ethereum price continues to guide ETH/USDT liquidity and broader altcoin sentiment."
     )
 
 
