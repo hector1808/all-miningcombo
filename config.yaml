@@ -38,18 +38,18 @@ auto_links:
 games:
   - game_key: "spur_protocol"
     enabled: true
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/10799"
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/18133"
     template_file: "games/spur-protocol.txt"
-    featured_media_id: 337629
+    featured_media_id: 337753
 
     check_answer: ""
     answer_heading_contains: "Spur Protocol Quiz Answers Today"
     snapshot_heading_prefix: "Today’s Crypto Market Update"
 
-    title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE}}"
-    slug_format: "spur-protocol-quiz-answer-{{CURRENT_DATE}}"
-    seo_title_format: "Spur Protocol Quiz Answer Today {{CURRENT_DATE}}"
-    meta_description_format: "Get the Spur Protocol quiz answer for {{CURRENT_DATE}}, including today’s question, correct answer, and crypto market update."
+    title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
+    slug_format: "spur-protocol-quiz-answer-today-{{CURRENT_DATE}}"
+    seo_title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
+    meta_description_format: "Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works, how to participate, earn rewards, and track today’s crypto market update."
 
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
