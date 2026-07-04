@@ -2,29 +2,65 @@ name: MiningCombo Auto Publisher
 
 on:
   workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Run mode: create or update"
+        required: true
+        default: "update"
+        type: choice
+        options:
+          - create
+          - update
+
   schedule:
+    # 02:00 GMT+7 = 19:00 UTC ngày trước
     - cron: "0 19 * * *"
+
+    # 07:00-12:00 GMT+7 mỗi 30 phút = 00:00-05:00 UTC
     - cron: "0,30 0-5 * * *"
 
 jobs:
-  run:
+  create_post:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'create' || github.event.schedule == '0 19 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
-      - name: Run publisher
+      - name: Run create mode
         env:
+          RUN_MODE: create
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python main.py
+
+  update_answer:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'update' || github.event.schedule == '0,30 0-5 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run update mode
+        env:
+          RUN_MODE: update
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
