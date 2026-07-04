@@ -31,12 +31,33 @@ def now_local(tz_name):
     return datetime.now(ZoneInfo(tz_name))
 
 
+def get_target_date(tz_name):
+    run_mode = os.getenv("RUN_MODE", "update").lower()
+    today = now_local(tz_name).date()
+
+    if run_mode == "create":
+        return today + timedelta(days=1)
+
+    if run_mode == "update":
+        return today
+
+    raise RuntimeError(f"Invalid RUN_MODE: {run_mode}")
+
+
+# def target_date_str(tz_name):
+#     return (now_local(tz_name).date() + timedelta(days=1)).isoformat()
+
+
+# def target_date_readable(tz_name):
+#     d = now_local(tz_name).date() + timedelta(days=1)
+#     return f"{d.strftime('%B')} {d.day}, {d.year}"
+
 def target_date_str(tz_name):
-    return (now_local(tz_name).date() + timedelta(days=1)).isoformat()
+    return get_target_date(tz_name).isoformat()
 
 
 def target_date_readable(tz_name):
-    d = now_local(tz_name).date() + timedelta(days=1)
+    d = get_target_date(tz_name)
     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
 
@@ -539,6 +560,16 @@ def process_game(cfg, ws, game_cfg):
     question, answer = extract_question_answer(source_content, game_cfg, cfg)
 
     row_idx, row = find_log_row(ws, date_str, game_key)
+
+    run_mode = os.getenv("RUN_MODE", "update").lower()
+
+    if run_mode == "create" and row:
+        print("Create mode: log already exists, skip.")
+        return
+    
+    if run_mode == "update" and not row:
+        print("Update mode: today's post log not found, skip.")
+        return
 
     if not row:
         print("No sheet log found. First run for this game/date.")
