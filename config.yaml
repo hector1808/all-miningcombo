@@ -42,7 +42,7 @@ games:
     template_file: "games/spur-protocol.txt"
     featured_media_id: 337753
 
-    check_answer: "B) Validate and store blockchain data independently."
+    check_answer: "C) Previous block hash."
     answer_heading_contains: "Spur Protocol Quiz Answers Today"
     snapshot_heading_prefix: "Today’s Crypto Market Update"
 
