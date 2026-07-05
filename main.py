@@ -76,6 +76,21 @@ def target_date_readable(tz_name):
     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
 
+def get_latest_check_answer_for_game(ws, game_key):
+    records = ws.get_all_records()
+
+    latest_row = None
+
+    for row in records:
+        if str(row.get("game_key")) == game_key and str(row.get("check_answer") or "").strip():
+            latest_row = row
+
+    if latest_row:
+        return latest_row.get("check_answer") or ""
+
+    return ""
+
+
 def current_time_hhmm(tz_name):
     return now_local(tz_name).strftime("%H:%M")
 
@@ -626,7 +641,12 @@ def process_game(cfg, ws, game_cfg):
     if not row:
         print("No sheet log found. First run for this game/date.")
 
-        initial_check_answer = game_cfg.get("check_answer", "")
+        # initial_check_answer = game_cfg.get("check_answer", "")
+        # answer_changed = should_update_answer(answer, initial_check_answer)
+
+        latest_sheet_check_answer = get_latest_check_answer_for_game(ws, game_key)
+        initial_check_answer = latest_sheet_check_answer or game_cfg.get("check_answer", "")
+        
         answer_changed = should_update_answer(answer, initial_check_answer)
 
         crypto_data = fetch_crypto_data(cfg)
