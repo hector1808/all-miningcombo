@@ -52,6 +52,21 @@ def get_target_date(tz_name):
 #     d = now_local(tz_name).date() + timedelta(days=1)
 #     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
+def scheduled_publish_datetime(tz_name):
+    target_date = get_target_date(tz_name)
+
+    publish_dt = datetime(
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        2,
+        0,
+        0,
+        tzinfo=ZoneInfo(tz_name),
+    )
+
+    return publish_dt.isoformat()
+
 def target_date_str(tz_name):
     return get_target_date(tz_name).isoformat()
 
@@ -427,9 +442,41 @@ def build_content(game_cfg, cfg, date_str, question, answer, crypto_snapshot_htm
     return auto_link_html(content, cfg)
 
 
+# def create_wp_post(cfg, game_cfg, title, slug, content):
+#     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
+
+#     featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
+
+#     payload = {
+#         "title": title,
+#         "slug": slug,
+#         "lang": cfg["wp"]["language"],
+#         "content": content,
+#         "status": cfg["wp"]["status"],
+#         "author": cfg["wp"]["author_id"],
+#         "categories": cfg["wp"]["category_ids"],
+#     }
+
+#     if featured_media_id:
+#         payload["featured_media"] = int(featured_media_id)
+
+#     r = requests.post(
+#         url,
+#         headers={**wp_headers(cfg), "Content-Type": "application/json"},
+#         json=payload,
+#         timeout=120,
+#     )
+
+#     if r.status_code >= 400:
+#         raise RuntimeError(f"Post create failed {r.status_code}: {r.text[:2000]}")
+
+#     return r.json()
+
+
 def create_wp_post(cfg, game_cfg, title, slug, content):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
+    run_mode = os.getenv("RUN_MODE", "update").lower()
     featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
 
     payload = {
@@ -437,10 +484,15 @@ def create_wp_post(cfg, game_cfg, title, slug, content):
         "slug": slug,
         "lang": cfg["wp"]["language"],
         "content": content,
-        "status": cfg["wp"]["status"],
         "author": cfg["wp"]["author_id"],
         "categories": cfg["wp"]["category_ids"],
     }
+
+    if run_mode == "create":
+        payload["status"] = "future"
+        payload["date"] = scheduled_publish_datetime(cfg["timezone"])
+    else:
+        payload["status"] = "publish"
 
     if featured_media_id:
         payload["featured_media"] = int(featured_media_id)
