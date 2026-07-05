@@ -7,7 +7,7 @@ wp:
   author_id: 159
   language: "en"
   category_ids: [4687]
-  status: "publish"
+  # status: "publish"
 
 google_sheet:
   sheet_id_env: "GOOGLE_SHEET_ID"
