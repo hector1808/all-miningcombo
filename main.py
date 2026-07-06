@@ -250,26 +250,71 @@ def fetch_source_page(url):
     return r.json()
 
 
+# def extract_question_answer(content_html, game_cfg, cfg):
+#     question_selector = game_cfg.get("question_selector") or cfg["defaults"]["question_selector"]
+#     answer_selector = game_cfg.get("answer_selector") or cfg["defaults"]["answer_selector"]
+
+#     soup = BeautifulSoup(content_html, "html.parser")
+
+#     question = ""
+#     answer = ""
+
+#     for p in soup.select(question_selector):
+#         text = p.get_text(" ", strip=True)
+#         if text.lower().startswith("question:"):
+#             question = re.sub(r"^question:\s*", "", text, flags=re.I).strip()
+#             break
+
+#     for p in soup.select(answer_selector):
+#         text = p.get_text(" ", strip=True)
+#         if text.lower().startswith("answer:"):
+#             answer = re.sub(r"^answer:\s*", "", text, flags=re.I).strip()
+#             break
+
+#     return question, answer
+
+
+def strip_prefix(text, prefix):
+    text = text.strip()
+    prefix = prefix.strip()
+
+    if text.lower().startswith(prefix.lower()):
+        return text[len(prefix):].strip()
+
+    return ""
+
+
+def extract_by_selector_and_prefix(soup, selector, prefix):
+    for el in soup.select(selector):
+        text = el.get_text(" ", strip=True)
+        value = strip_prefix(text, prefix)
+
+        if value:
+            return value
+
+    return ""
+
+
 def extract_question_answer(content_html, game_cfg, cfg):
     question_selector = game_cfg.get("question_selector") or cfg["defaults"]["question_selector"]
     answer_selector = game_cfg.get("answer_selector") or cfg["defaults"]["answer_selector"]
 
+    question_prefix = game_cfg.get("question_prefix") or cfg["defaults"].get("question_prefix", "Question:")
+    answer_prefix = game_cfg.get("answer_prefix") or cfg["defaults"].get("answer_prefix", "Answer:")
+
     soup = BeautifulSoup(content_html, "html.parser")
 
-    question = ""
-    answer = ""
+    question = extract_by_selector_and_prefix(
+        soup=soup,
+        selector=question_selector,
+        prefix=question_prefix,
+    )
 
-    for p in soup.select(question_selector):
-        text = p.get_text(" ", strip=True)
-        if text.lower().startswith("question:"):
-            question = re.sub(r"^question:\s*", "", text, flags=re.I).strip()
-            break
-
-    for p in soup.select(answer_selector):
-        text = p.get_text(" ", strip=True)
-        if text.lower().startswith("answer:"):
-            answer = re.sub(r"^answer:\s*", "", text, flags=re.I).strip()
-            break
+    answer = extract_by_selector_and_prefix(
+        soup=soup,
+        selector=answer_selector,
+        prefix=answer_prefix,
+    )
 
     return question, answer
 
