@@ -29,13 +29,14 @@ crypto_snapshot:
     - "BTC/USDT"
     - "Ethereum price"
     - "ETH/USDT"
-    - "Solana (SOL)"
 
 auto_links:
   "Bitcoin price": "https://www.mexc.com/price/BTC"
   "Bitcoin price prediction": "https://www.mexc.com/price-prediction/BTC"
   "Ethereum price": "https://www.mexc.com/price/ETH"
   "Ethereum price prediction": "https://www.mexc.com/price-prediction/ETH"
+  "BTC/USDT": "https://www.mexc.com/exchange/BTC_USDT"
+  "ETH/USDT": "https://www.mexc.com/exchange/ETH_USDT"
 
 games:
   - game_key: "spur_protocol"
