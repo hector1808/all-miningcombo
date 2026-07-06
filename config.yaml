@@ -19,6 +19,8 @@ openai:
 defaults:
   question_selector: "p.has-text-align-left.wp-block-paragraph"
   answer_selector: "p.has-text-align-left.wp-block-paragraph"
+  question_prefix: "Question:"
+  answer_prefix: "Answer:"
 
 crypto_snapshot:
   coingecko_url: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&price_change_percentage=24h"
