@@ -15,6 +15,35 @@ from google.oauth2.service_account import Credentials
 from openai import OpenAI
 
 
+def parse_wp_datetime_local(value, tz_name):
+    if not value:
+        return None
+
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+    if dt.tzinfo is None:
+        # WordPress field "modified" thường là local time của site.
+        dt = dt.replace(tzinfo=ZoneInfo(tz_name))
+    else:
+        dt = dt.astimezone(ZoneInfo(tz_name))
+
+    return dt
+
+
+def target_date_start_datetime(tz_name):
+    d = get_target_date(tz_name)
+    return datetime.combine(d, time(0, 0, 0), tzinfo=ZoneInfo(tz_name))
+
+
+def is_source_for_target_date(source_modified, tz_name):
+    source_dt = parse_wp_datetime_local(source_modified, tz_name)
+
+    if not source_dt:
+        return False
+
+    return source_dt >= target_date_start_datetime(tz_name)
+
+
 def load_config():
     with open("config.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -622,6 +651,11 @@ def process_game(cfg, ws, game_cfg):
 
     source = fetch_source_page(game_cfg["source_api_url"])
     source_modified = source.get("modified") or source.get("date") or ""
+    
+    source_is_today_target = is_source_for_target_date(
+        source_modified,
+        cfg["timezone"],
+    )
     source_content = source.get("content", {}).get("rendered", "")
 
     question, answer = extract_question_answer(source_content, game_cfg, cfg)
@@ -653,15 +687,26 @@ def process_game(cfg, ws, game_cfg):
         base_snapshot = make_base_snapshot(crypto_data)
         crypto_snapshot_html = rewrite_snapshot_with_openai(cfg, game_key, base_snapshot)
 
-        if answer_changed:
+        # if answer_changed:
+        #     publish_question = question
+        #     publish_answer = answer
+        #     log_status = "created_with_new_answer"
+        #     new_check_answer = answer
+        # else:
+        #     publish_question = "Updating soon."
+        #     publish_answer = "Updating soon."
+        #     log_status = "created_waiting_answer"
+        #     new_check_answer = initial_check_answer
+
+        if answer_changed and source_is_today_target:
             publish_question = question
             publish_answer = answer
-            log_status = "created_with_new_answer"
+            log_status = "created_with_target_date_answer"
             new_check_answer = answer
         else:
-            publish_question = "Updating soon."
+            publish_question = question or "Updating soon."
             publish_answer = "Updating soon."
-            log_status = "created_waiting_answer"
+            log_status = "created_waiting_target_date_answer"
             new_check_answer = initial_check_answer
 
         content = build_content(
@@ -708,15 +753,33 @@ def process_game(cfg, ws, game_cfg):
     sheet_check_answer = row.get("check_answer") or ""
     answer_changed = should_update_answer(answer, sheet_check_answer)
 
+    # if not answer_changed:
+    #     print("Answer unchanged. No post update needed.")
+
+    #     update_log_row(ws, row_idx, {
+    #         "source_modified": source_modified,
+    #         "status": "checked_no_new_answer",
+    #         "updated_at": timestamp,
+    #     })
+
+    #     return
+
+    if not source_is_today_target:
+    print("Source content is not updated for target date yet. Skip.")
+    update_log_row(ws, row_idx, {
+        "source_modified": source_modified,
+        "status": "checked_source_not_target_date",
+        "updated_at": timestamp,
+    })
+    return
+
     if not answer_changed:
         print("Answer unchanged. No post update needed.")
-
         update_log_row(ws, row_idx, {
             "source_modified": source_modified,
             "status": "checked_no_new_answer",
             "updated_at": timestamp,
         })
-
         return
 
     print("New answer detected. Updating existing post.")
