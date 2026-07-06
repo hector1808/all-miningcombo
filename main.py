@@ -396,8 +396,11 @@ Requirements:
 - Keep exactly two paragraphs:
   - one for Bitcoin
   - one for Ethereum
-- Begin each paragraph exactly with the supplied text.
-- After each first sentence, add only ONE short sentence describing the current market trend.
+- Begin each paragraph exactly with the supplied first sentence.
+- After the first sentence, write TWO or THREE additional sentences describing only the current market situation.
+- The additional sentences should discuss topics such as short-term momentum, market sentiment, trading activity, or ecosystem strength.
+- Do not mention any information that cannot be reasonably inferred from the provided price movement.
+- Never invent news, partnerships, ETF approvals, on-chain metrics, or macroeconomic events.
 - Naturally include these phrases:
   - Bitcoin price
   - BTC/USDT
