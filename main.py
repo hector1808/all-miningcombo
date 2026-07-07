@@ -32,7 +32,16 @@ def parse_wp_datetime_local(value, tz_name):
 
 def target_date_start_datetime(tz_name):
     d = get_target_date(tz_name)
-    return datetime.combine(d, time(0, 0, 0), tzinfo=ZoneInfo(tz_name))
+
+    return datetime(
+        d.year,
+        d.month,
+        d.day,
+        0,
+        0,
+        0,
+        tzinfo=ZoneInfo(tz_name),
+    )
 
 
 def is_source_for_target_date(source_modified, tz_name):
