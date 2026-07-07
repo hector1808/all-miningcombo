@@ -761,7 +761,7 @@ def process_game(cfg, ws, game_cfg):
             log_status = "created_with_target_date_answer"
             new_check_answer = answer
         else:
-            publish_question = question or "Updating soon."
+            publish_question = "Updating soon."
             publish_answer = "Updating soon."
             log_status = "created_waiting_target_date_answer"
             new_check_answer = initial_check_answer
