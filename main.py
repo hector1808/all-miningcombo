@@ -813,13 +813,13 @@ def process_game(cfg, ws, game_cfg):
     #     return
 
     if not source_is_today_target:
-    print("Source content is not updated for target date yet. Skip.")
-    update_log_row(ws, row_idx, {
-        "source_modified": source_modified,
-        "status": "checked_source_not_target_date",
-        "updated_at": timestamp,
-    })
-    return
+        print("Source content is not updated for target date yet. Skip.")
+        update_log_row(ws, row_idx, {
+            "source_modified": source_modified,
+            "status": "checked_source_not_target_date",
+            "updated_at": timestamp,
+        })
+        return
 
     if not answer_changed:
         print("Answer unchanged. No post update needed.")
