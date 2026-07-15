@@ -68,7 +68,22 @@ games:
     title_format: "Today’s Syntax Verse Quiz Answers ({{CURRENT_DATE_READABLE}})"
     slug_format: "syntax-verse-quiz-{{CURRENT_DATE_SLUG}}"
     seo_title_format: "Syntax Verse Quiz Today ({{CURRENT_DATE_READABLE}}) - Daily Answer Updated"
-    meta_description_format: "Syntax Verse quiz today's correct answer, updated daily. Solve it inside the app and earn free $SYNTAX tokens in under a minute. "
+    meta_description_format: "Syntax Verse quiz today's correct answer, updated daily. Solve it inside the app and earn free $SYNTAX tokens in under a minute."
+
+  - game_key: "marina_protocol"
+    enabled: true
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/9711"
+    template_file: "games/marina-protocol.txt"
+    featured_media_id: 338222
+
+    check_answer: "A) Legal enforceability."
+    answer_heading_contains: "Marina Protocol Today Quiz Answer"
+    snapshot_heading_prefix: "Crypto Market Snapshot"
+
+    title_format: "Marina Protocol Today Answer For {{CURRENT_DATE_READABLE}}"
+    slug_format: "marina-protocol-today-answer-{{CURRENT_DATE_SLUG}}"
+    seo_title_format: "Marina Protocol Today Answer ({{CURRENT_DATE_READABLE}}) – Daily Quiz Updated"
+    meta_description_format: "Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how SURF Coins and the BAY token actually work right now, and claim your reward before the reset."
 
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
