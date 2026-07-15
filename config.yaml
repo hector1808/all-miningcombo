@@ -87,6 +87,21 @@ games:
     seo_title_format: "Marina Protocol Today Answer ({{CURRENT_DATE_READABLE}}) – Daily Quiz Updated"
     meta_description_format: "Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how SURF Coins and the BAY token actually work right now, and claim your reward before the reset."
 
+  - game_key: "dropee_question"
+    enabled: true
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/6939"
+    template_file: "games/dropee-question.txt"
+    featured_media_id: 338223
+
+    check_answer: "Shut Down"
+    answer_heading_contains: "Dropee Question of the Day Answer For"
+    snapshot_heading_prefix: "Today's Crypto Market Overview"
+
+    title_format: "Dropee Question of the Day Answer Today – {{CURRENT_DATE_READABLE}}"
+    slug_format: "dropee-question-of-the-day-answer-today-{{CURRENT_DATE_SLUG}}"
+    seo_title_format: "Dropee Question of the Day Answer Today ({{CURRENT_DATE_READABLE}})"
+    meta_description_format: "Dropee Question of the Day answer today, updated daily. Copy the correct answer, paste it into Dropee Bot, and claim free $DROPEE tokens in seconds."
+    
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
     #   - "02:00"
