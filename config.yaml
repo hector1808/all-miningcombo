@@ -75,6 +75,8 @@ games:
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/9711"
     template_file: "games/marina-protocol.txt"
     featured_media_id: 338222
+    question_selector: "p.wp-block-paragraph"
+    answer_selector: "p.wp-block-paragraph"
 
     check_answer: "A) Legal enforceability."
     answer_heading_contains: "Marina Protocol Today Quiz Answer"
