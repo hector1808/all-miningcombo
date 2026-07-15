@@ -128,6 +128,11 @@ def target_date_readable(tz_name):
     d = get_target_date(tz_name)
     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
+def target_date_slug(tz_name):
+    d = get_target_date(tz_name)
+
+    return f"{d.day}-{d.strftime('%B').lower()}-{d.year}"
+
 
 def get_latest_check_answer_for_game(ws, game_key):
     records = ws.get_all_records()
@@ -148,10 +153,15 @@ def current_time_hhmm(tz_name):
     return now_local(tz_name).strftime("%H:%M")
 
 
-def replace_date_vars(text, date_str, readable_date=None):
+def replace_date_vars(text, date_str, readable_date=None, slug_date=None):
     text = text.replace("{{CURRENT_DATE}}", date_str)
+
     if readable_date:
         text = text.replace("{{CURRENT_DATE_READABLE}}", readable_date)
+
+    if slug_date:
+        text = text.replace("{{CURRENT_DATE_SLUG}}", slug_date)
+
     return text
 
 
@@ -712,12 +722,43 @@ def process_game(cfg, ws, game_cfg):
     game_key = game_cfg["game_key"]
     date_str = target_date_str(cfg["timezone"])
     readable_date = target_date_readable(cfg["timezone"])
+    slug_date = target_date_slug(cfg["timezone"])
     timestamp = now_local(cfg["timezone"]).isoformat(timespec="seconds")
 
-    title = replace_date_vars(game_cfg["title_format"], date_str, readable_date)
-    slug = normalize_slug(replace_date_vars(game_cfg["slug_format"], date_str, readable_date))
-    seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str, readable_date)
-    meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str, readable_date)
+    # title = replace_date_vars(game_cfg["title_format"], date_str, readable_date)
+    # slug = normalize_slug(replace_date_vars(game_cfg["slug_format"], date_str, readable_date))
+    # seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str, readable_date)
+    # meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str, readable_date)
+
+    title = replace_date_vars(
+        game_cfg["title_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
+    
+    slug = normalize_slug(
+        replace_date_vars(
+            game_cfg["slug_format"],
+            date_str,
+            readable_date,
+            slug_date,
+        )
+    )
+    
+    seo_title = replace_date_vars(
+        game_cfg["seo_title_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
+    
+    meta_description = replace_date_vars(
+        game_cfg["meta_description_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
 
     print(f"Processing {game_key} for {date_str}")
 
