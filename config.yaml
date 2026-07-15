@@ -54,6 +54,21 @@ games:
     seo_title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
     meta_description_format: "Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works, how to participate, earn rewards, and track today’s crypto market update."
 
+  - game_key: "syntax_verse"
+    enabled: true
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/22199"
+    template_file: "games/syntax-verse.txt"
+    featured_media_id: 338210
+
+    check_answer: "B) Consistency can compound knowledge and platform progression over time."
+    answer_heading_contains: "Syntax Verse Daily Quiz Answer"
+    snapshot_heading_prefix: "Today Crypto Market Snapshot"
+
+    title_format: "Today’s Syntax Verse Quiz Answers ({{CURRENT_DATE_READABLE}})"
+    slug_format: "syntax-verse-quiz-{{CURRENT_DATE_SLUG}}"
+    seo_title_format: "Syntax Verse Quiz Today ({{CURRENT_DATE_READABLE}}) - Daily Answer Updated"
+    meta_description_format: "Syntax Verse quiz today's correct answer, updated daily. Solve it inside the app and earn free $SYNTAX tokens in under a minute. "
+
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
     #   - "02:00"
