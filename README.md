@@ -1,20 +1,20 @@
 # MiningCombo Auto Publisher
 
-Project tự động lấy dữ liệu từ MiningCombo và đăng bài lên WordPress.
+A project that automatically retrieves data from MiningCombo and publishes articles to WordPress.
 
-## Chức năng
+## Features
 
-- Tạo bài viết mới mỗi ngày cho từng game.
-- Bài viết được schedule publish lúc **02:00 (GMT+7)** của ngày mục tiêu.
-- Tự động kiểm tra đáp án mới và update bài viết.
-- Rewrite phần Crypto Snapshot bằng OpenAI.
-- Ghi log vào Google Sheet để tránh tạo/update trùng.
+* Creates a new article every day for each game.
+* Schedules articles to be published at **02:00 AM (GMT+7)** on the target date.
+* Automatically checks for new answers and updates existing articles.
+* Rewrites the Crypto Snapshot section using OpenAI.
+* Records activity in Google Sheets to prevent duplicate article creation or updates.
 
 ---
 
-# Cấu trúc project
+# Project Structure
 
-```
+```text
 config.yaml
 main.py
 games/
@@ -23,23 +23,23 @@ games/
     ...
 ```
 
-- `config.yaml`: cấu hình chung và cấu hình từng game.
-- `games/*.txt`: template HTML của từng game.
-- `main.py`: chương trình chính.
+* `config.yaml`: Contains the general settings and configuration for each game.
+* `games/*.txt`: Contains the HTML template for each game.
+* `main.py`: The main program.
 
 ---
 
-# Thêm game mới
+# Adding a New Game
 
-## Bước 1
+## Step 1
 
-Tạo file template:
+Create a template file:
 
+```text
+games/game-name.txt
 ```
-games/ten-game.txt
-```
 
-Template phải có tối thiểu:
+The template must contain at least:
 
 ```html
 <h2><strong>Game Quiz Answers Today - {{CURRENT_DATE_READABLE}}</strong></h2>
@@ -56,11 +56,11 @@ Template phải có tối thiểu:
 
 ---
 
-## Bước 2
+## Step 2
 
-Thêm game vào `config.yaml`
+Add the game to `config.yaml`.
 
-Ví dụ:
+Example:
 
 ```yaml
 games:
@@ -95,15 +95,15 @@ games:
 
 ---
 
-# Các field quan trọng
+# Important Fields
 
 ## game_key
 
-Tên duy nhất của game.
+A unique identifier for the game.
 
-Ví dụ:
+Example:
 
-```
+```text
 spur_protocol
 ```
 
@@ -111,11 +111,11 @@ spur_protocol
 
 ## source_api_url
 
-API WordPress của MiningCombo.
+The MiningCombo WordPress API endpoint.
 
-Ví dụ:
+Example:
 
-```
+```text
 https://miningcombo.com/wp-json/wp/v2/pages/10799
 ```
 
@@ -123,11 +123,11 @@ https://miningcombo.com/wp-json/wp/v2/pages/10799
 
 ## template_file
 
-File HTML template.
+The HTML template file.
 
-Ví dụ:
+Example:
 
-```
+```text
 games/spur-protocol.txt
 ```
 
@@ -135,46 +135,46 @@ games/spur-protocol.txt
 
 ## featured_media_id
 
-Media ID trên WordPress.
+The media ID in WordPress.
 
-Ảnh này sẽ:
+This image will:
 
-- làm Featured Image
-- có thể dùng trong nội dung nếu template sử dụng.
+* Be used as the Featured Image.
+* Be available for use inside the article content if the template includes it.
 
 ---
 
 ## check_answer
 
-Chỉ dùng cho lần chạy đầu tiên của game.
+This value is only used during the first run for a game.
 
-Sau khi game đã có log trong Google Sheet, project sẽ sử dụng `check_answer` trong Sheet thay vì giá trị này.
+After the game has a corresponding log entry in Google Sheets, the project will use the `check_answer` value stored in the Sheet instead of the value in `config.yaml`.
 
 ---
 
 ## answer_heading_contains
 
-Dùng để xác định H2 chứa phần Question / Correct Answer.
+Used to identify the H2 section containing the Question and Correct Answer.
 
-Ví dụ:
+Example:
 
-```
+```text
 Spur Protocol Quiz Answers Today
 ```
 
-Không cần đúng 100%.
+The text does not need to match the H2 exactly.
 
-Chỉ cần H2 chứa chuỗi này.
+The H2 only needs to contain this string.
 
 ---
 
 ## question_selector
 
-CSS Selector để lấy Question từ MiningCombo.
+The CSS selector used to retrieve the Question from MiningCombo.
 
-Ví dụ:
+Example:
 
-```
+```text
 p.has-text-align-left.wp-block-paragraph
 ```
 
@@ -182,11 +182,11 @@ p.has-text-align-left.wp-block-paragraph
 
 ## answer_selector
 
-CSS Selector để lấy Answer.
+The CSS selector used to retrieve the Answer.
 
-Ví dụ:
+Example:
 
-```
+```text
 p.has-text-align-left.wp-block-paragraph
 ```
 
@@ -194,11 +194,11 @@ p.has-text-align-left.wp-block-paragraph
 
 ## question_prefix
 
-Tiền tố dùng để nhận biết Question.
+The prefix used to identify the Question.
 
-Ví dụ:
+Example:
 
-```
+```text
 Question:
 ```
 
@@ -206,58 +206,58 @@ Question:
 
 ## answer_prefix
 
-Tiền tố dùng để nhận biết Answer.
+The prefix used to identify the Answer.
 
-Ví dụ:
+Example:
 
-```
+```text
 Answer:
 ```
 
 ---
 
-# Google Sheet
+# Google Sheets
 
-Mỗi dòng tương ứng một game của một ngày.
+Each row represents one game for one target date.
 
-Các cột quan trọng:
+Important columns:
 
-- target_date
-- game_key
-- post_id
-- check_answer
-- status
+* `target_date`
+* `game_key`
+* `post_id`
+* `check_answer`
+* `status`
 
-Project sẽ đọc Sheet để quyết định:
+The project reads the Sheet to determine:
 
-- đã tạo bài chưa
-- có cần update đáp án không
+* Whether the article has already been created.
+* Whether the answer needs to be updated.
 
 ---
 
 # RUN_MODE
 
-Project có 2 mode.
+The project has two modes.
 
 ## create
 
-- target_date = ngày mai
-- tạo bài Scheduled
-- publish lúc 02:00 GMT+7
+* `target_date` is tomorrow.
+* Creates a scheduled article.
+* Publishes the article at 02:00 AM GMT+7.
 
 ## update
 
-- target_date = hôm nay
-- kiểm tra đáp án
-- update bài nếu có thay đổi
+* `target_date` is today.
+* Checks for the latest answer.
+* Updates the article if the answer has changed.
 
 ---
 
 # GitHub Secrets
 
-Các secret cần có:
+The following secrets are required:
 
-```
+```text
 WP_USERNAME
 
 WP_APP_PASSWORD
@@ -271,8 +271,8 @@ GOOGLE_SHEET_ID
 
 ---
 
-# Lưu ý
+# Notes
 
-- Không sửa trực tiếp các H2 dùng để xác định Question/Answer.
-- Khi thay đổi cấu trúc HTML của MiningCombo, chỉ cần sửa selector hoặc prefix trong `config.yaml`, không cần sửa code.
-- Nếu game có cấu trúc đặc biệt, ưu tiên override trong config thay vì sửa `main.py`.
+* Do not directly modify the H2 headings used to identify the Question and Answer sections.
+* If the MiningCombo HTML structure changes, update the selectors or prefixes in `config.yaml`. There is no need to modify the code.
+* If a game uses a special structure, prefer overriding its settings in the configuration instead of modifying `main.py`.
