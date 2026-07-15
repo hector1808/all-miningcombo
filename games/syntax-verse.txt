@@ -7,9 +7,7 @@
 <div class="wp-block-button"><a class="wp-block-button__link has-white-color has-text-color has-background has-link-color wp-element-button" style="background-color: #0057ff; border-radius: 50px;" href="https://www.mexc.com/register?utm_source=bdy-&amp;utm_medium=bottom&amp;inviteCode=mexc-blogbutton" target="_blank" rel="noreferrer noopener">Sign up on MEXC today and get ready to trade</a></div>
 </div>
 <h2><strong>Syntax Verse Daily Quiz Answer - {{CURRENT_DATE_READABLE}}</strong></h2>
-<p><span style="font-weight: 400;">Complete today's daily challenge with the verified answer below.</span></p>
-<p><strong>Quiz: </strong><span style="font-weight: 400;">Daily Question</span></p>
-<p><strong>Answer: </strong><span style="font-weight: 400;">Correct Answer</span></p>
+<p><strong>Question:</strong><span style="font-weight: 400;"><br /></span><strong>Correct Answer:</strong></p>
 <p><span style="font-weight: 400;">To claim: open the Syntax Verse app → find the daily quiz card on the home screen → select the answer above → submit before the daily reset.</span></p>
 <p><strong>Reminder: </strong><span style="font-weight: 400;">The Daily Quiz refreshes every 24 hours, so be sure to submit your answer before the next reset.</span></p>
 <h2><strong>What Is Syntax Verse?</strong></h2>
