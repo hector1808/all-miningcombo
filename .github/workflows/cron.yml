@@ -14,10 +14,10 @@ on:
 
   schedule:
     # 02:00 GMT+7 = 19:00 UTC ngày trước
-    - cron: "0 19 * * *"
+    - cron: "17,37 19 * * *"
 
     # 07:00-12:00 GMT+7 mỗi 30 phút = 00:00-05:00 UTC
-    - cron: "0,30 0-5 * * *"
+    - cron: "17,37,57 0-5 * * *"
 
 jobs:
   create_post:
