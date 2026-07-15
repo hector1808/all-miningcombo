@@ -38,7 +38,7 @@
 </div>
 <h2><strong>Today Crypto Market Snapshot</strong></h2>
 <p><span style="font-weight: 400;">While completing today's Syntax Verse Quiz, it's also worth following the broader crypto market.</span></p>
-<p><span style="font-weight: 400;">{{CRYPTO_SNAPSHOT}}</span></p>
+{{CRYPTO_SNAPSHOT}}
 <p><span style="font-weight: 400;">For users looking to go beyond daily quiz rewards, MEXC provides access to </span><a href="https://www.mexc.com/exchange/BTC_USDT"><span style="font-weight: 400;">BTC/USDT</span></a><span style="font-weight: 400;">, </span><a href="https://www.mexc.com/exchange/ETH_USDT"><span style="font-weight: 400;">ETH/USDT</span></a><span style="font-weight: 400;"> </span><span style="font-weight: 400;">and thousands of other cryptocurrencies across spot and futures markets with competitive fees and deep liquidity.</span></p>
 <h2><strong>FAQ</strong></h2>
 <h3><strong>What is Syntax Verse Quiz Today?</strong></h3>
