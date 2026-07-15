@@ -90,14 +90,29 @@ def get_target_date(tz_name):
 #     d = now_local(tz_name).date() + timedelta(days=1)
 #     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
+# def scheduled_publish_datetime(tz_name):
+#     target_date = get_target_date(tz_name)
+
+#     publish_dt = datetime(
+#         target_date.year,
+#         target_date.month,
+#         target_date.day,
+#         2,
+#         0,
+#         0,
+#         tzinfo=ZoneInfo(tz_name),
+#     )
+
+#     return publish_dt.isoformat()
+
 def scheduled_publish_datetime(tz_name):
-    target_date = get_target_date(tz_name)
+    today = now_local(tz_name).date()
 
     publish_dt = datetime(
-        target_date.year,
-        target_date.month,
-        target_date.day,
-        2,
+        today.year,
+        today.month,
+        today.day,
+        22,
         0,
         0,
         tzinfo=ZoneInfo(tz_name),
