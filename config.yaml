@@ -50,7 +50,7 @@ games:
     snapshot_heading_prefix: "Today’s Crypto Market Update"
 
     title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
-    slug_format: "spur-protocol-quiz-answer-today-{{CURRENT_DATE}}"
+    slug_format: "spur-protocol-quiz-answer-today-{{CURRENT_DATE_SLUG}}"
     seo_title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
     meta_description_format: "Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works, how to participate, earn rewards, and track today’s crypto market update."
 
