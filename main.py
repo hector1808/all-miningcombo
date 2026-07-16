@@ -308,14 +308,26 @@ def fetch_source_page(url):
 #     return question, answer
 
 
+# def strip_prefix(text, prefix):
+#     text = text.strip()
+#     prefix = prefix.strip()
+
+#     if text.lower().startswith(prefix.lower()):
+#         return text[len(prefix):].strip()
+
+#     return ""
+
 def strip_prefix(text, prefix):
     text = text.strip()
-    prefix = prefix.strip()
+    prefix = prefix.strip().rstrip(":")
 
-    if text.lower().startswith(prefix.lower()):
-        return text[len(prefix):].strip()
+    pattern = rf"^\s*{re.escape(prefix)}\s*:?\s*"
+    match = re.match(pattern, text, flags=re.I)
 
-    return ""
+    if not match:
+        return ""
+
+    return text[match.end():].strip()
 
 
 def extract_by_selector_and_prefix(soup, selector, prefix):
