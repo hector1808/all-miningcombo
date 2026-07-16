@@ -18,7 +18,7 @@ on:
 
 jobs:
   create_post:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'create' || github.event.schedule == '0 19 * * *'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'create' || github.event.schedule == '17,37 19 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -42,7 +42,7 @@ jobs:
         run: python main.py
 
   update_answer:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'update' || github.event.schedule == '0,30 0-5 * * *'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'update' || github.event.schedule == '17,37,57 0-5 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
