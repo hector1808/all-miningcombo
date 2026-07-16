@@ -19,8 +19,8 @@ openai:
 defaults:
   question_selector: "p.has-text-align-left.wp-block-paragraph"
   answer_selector: "p.has-text-align-left.wp-block-paragraph"
-  question_prefix: "Question"
-  answer_prefix: "Answer"
+  question_prefix: "Question:"
+  answer_prefix: "Answer:"
 
 crypto_snapshot:
   coingecko_url: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&price_change_percentage=24h"
@@ -55,7 +55,7 @@ games:
     meta_description_format: "Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works, how to participate, earn rewards, and track today’s crypto market update."
 
   - game_key: "syntax_verse"
-    question_prefix: "Quiz"
+    question_prefix: "Quiz:"
     enabled: true
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/22199"
     template_file: "games/syntax-verse.txt"
