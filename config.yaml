@@ -93,7 +93,7 @@ games:
     template_file: "games/dropee-question.txt"
     featured_media_id: 338223
     question_selector: "p.has-text-align-center.wp-block-paragraph"
-    answer_selector: : "p.has-text-align-center.wp-block-paragraph"
+    answer_selector: "p.has-text-align-center.wp-block-paragraph"
 
     check_answer: "Shut Down"
     answer_heading_contains: "Dropee Question of the Day Answer For"
