@@ -14,7 +14,7 @@ on:
 
   schedule:
     - cron: "17,37 19 * * *"
-    - cron: "17,37,57 0-8 * * *"
+    - cron: "17,37,57 0-15 * * *"
 
 jobs:
   create_post:
@@ -42,7 +42,7 @@ jobs:
         run: python main.py
 
   update_answer:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'update' || github.event.schedule == '17,37,57 0-8 * * *'
+    if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'update' || github.event.schedule == '17,37,57 0-15 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
