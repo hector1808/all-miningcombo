@@ -364,6 +364,155 @@ def extract_question_answer(content_html, game_cfg, cfg):
 
     return question, answer
 
+def find_label_element(soup, selector, prefix):
+    """
+    Tìm element chỉ chứa label, ví dụ:
+    <p><strong>Simplified:</strong></p>
+    """
+    clean_prefix = prefix.strip().rstrip(":")
+
+    pattern = re.compile(
+        rf"^\s*{re.escape(clean_prefix)}\s*:?\s*$",
+        flags=re.I,
+    )
+
+    for el in soup.select(selector):
+        text = el.get_text(" ", strip=True)
+
+        if pattern.match(text):
+            return el
+
+    return None
+
+
+def extract_hamster_cipher(content_html, game_cfg):
+    soup = BeautifulSoup(content_html, "html.parser")
+
+    word_selector = game_cfg.get(
+        "word_selector",
+        "p.wp-block-paragraph",
+    )
+    word_prefix = game_cfg.get(
+        "word_prefix",
+        "Word",
+    )
+
+    simplified_label_selector = game_cfg.get(
+        "simplified_label_selector",
+        "p.wp-block-paragraph",
+    )
+    simplified_prefix = game_cfg.get(
+        "simplified_prefix",
+        "Simplified",
+    )
+
+    # Lấy Word: DUST
+    word = extract_by_selector_and_prefix(
+        soup=soup,
+        selector=word_selector,
+        prefix=word_prefix,
+    )
+
+    # Tìm paragraph chỉ chứa "Simplified:"
+    simplified_label = find_label_element(
+        soup=soup,
+        selector=simplified_label_selector,
+        prefix=simplified_prefix,
+    )
+
+    simplified_lines = []
+
+    if simplified_label:
+        # Paragraph chứa Hold/Tap thường nằm ngay sau label.
+        simplified_content = simplified_label.find_next_sibling("p")
+
+        # Fallback nếu HTML source có thêm wrapper hoặc block khác.
+        if not simplified_content:
+            simplified_content = simplified_label.find_next("p")
+
+        if simplified_content:
+            raw_lines = simplified_content.get_text(
+                "\n",
+                strip=True,
+            )
+
+            simplified_lines = [
+                line.strip()
+                for line in raw_lines.splitlines()
+                if line.strip()
+            ]
+
+    return word, simplified_lines
+
+def extract_game_answer_data(content_html, game_cfg, cfg):
+    answer_type = game_cfg.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "hamster_cipher":
+        word, simplified_lines = extract_hamster_cipher(
+            content_html=content_html,
+            game_cfg=game_cfg,
+        )
+
+        return {
+            "answer_type": "hamster_cipher",
+
+            # Giữ tương thích với các cột Sheet hiện tại.
+            "question": word,
+            "answer": "\n".join(simplified_lines),
+
+            # Hamster dùng word để phát hiện đáp án mới.
+            "check_value": word,
+
+            # Dữ liệu riêng để render HTML.
+            "word": word,
+            "simplified_lines": simplified_lines,
+        }
+
+    if answer_type == "question_answer":
+        question, answer = extract_question_answer(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            cfg=cfg,
+        )
+
+        return {
+            "answer_type": "question_answer",
+            "question": question,
+            "answer": answer,
+            "check_value": answer,
+        }
+
+    raise RuntimeError(
+        f"Unsupported answer_type: {answer_type}"
+    )
+
+
+def make_waiting_answer_data(game_cfg):
+    answer_type = game_cfg.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "hamster_cipher":
+        return {
+            "answer_type": "hamster_cipher",
+            "question": "Updating soon.",
+            "answer": "Updating soon.",
+            "check_value": "",
+            "word": "Updating soon.",
+            "simplified_lines": [],
+        }
+
+    return {
+        "answer_type": "question_answer",
+        "question": "Updating soon.",
+        "answer": "Updating soon.",
+        "check_value": "",
+    }
+
 
 def fetch_crypto_data(cfg):
     url = cfg["crypto_snapshot"]["coingecko_url"]
@@ -560,24 +709,210 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
 
     return str(soup)
 
-
-def build_content(game_cfg, cfg, date_str, question, answer, crypto_snapshot_html):
-    readable_date = target_date_readable(cfg["timezone"])
-
-    with open(game_cfg["template_file"], "r", encoding="utf-8") as f:
-        template = f.read()
-
-    content = replace_date_vars(template, date_str, readable_date)
-    content = content.replace("{{CRYPTO_SNAPSHOT}}", crypto_snapshot_html)
-
-    content = update_quiz_answer_block(
-        content_html=content,
-        game_cfg=game_cfg,
-        question=question,
-        answer=answer,
+def build_hamster_cipher_answer_area(
+    readable_date,
+    word,
+    simplified_lines,
+):
+    safe_date = html.escape(
+        str(readable_date or "")
     )
 
-    return auto_link_html(content, cfg)
+    safe_word = html.escape(
+        str(word or "Updating soon.")
+    )
+
+    if simplified_lines:
+        sequence_html = "<br>\n".join(
+            html.escape(str(line))
+            for line in simplified_lines
+            if str(line).strip()
+        )
+    else:
+        sequence_html = "Updating soon."
+
+    return (
+        f'<p><strong>Date:</strong> {safe_date}'
+        f' &nbsp; <strong>Word:</strong> {safe_word}</p>\n'
+        '<p>The GameDev mini-game hides its reward behind a short cipher. '
+        'Instead of typing the word directly, each letter is entered on '
+        'the keypad as a Hold/Tap pattern:</p>\n'
+        f'<p>{sequence_html}</p>'
+    )
+
+
+def replace_answer_area(
+    content_html,
+    game_cfg,
+    answer_area_html,
+):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    answer_area_id = game_cfg.get(
+        "answer_area_id",
+        "answer-area",
+    )
+
+    target = soup.find(
+        "div",
+        id=answer_area_id,
+    )
+
+    if not target:
+        raise RuntimeError(
+            f"Answer area div not found: #{answer_area_id}"
+        )
+
+    # Xóa toàn bộ nội dung cũ bên trong div,
+    # nhưng giữ lại chính div và id của nó.
+    target.clear()
+
+    fragment = BeautifulSoup(
+        answer_area_html,
+        "html.parser",
+    )
+
+    # Dùng list() vì các node bị di chuyển khỏi fragment
+    # trong lúc append.
+    for node in list(fragment.contents):
+        target.append(node)
+
+    return str(soup)
+
+
+def update_existing_answer_content(
+    content_html,
+    game_cfg,
+    answer_data,
+    readable_date,
+):
+    answer_type = answer_data.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "hamster_cipher":
+        answer_area_html = build_hamster_cipher_answer_area(
+            readable_date=readable_date,
+            word=answer_data.get("word"),
+            simplified_lines=answer_data.get(
+                "simplified_lines",
+                [],
+            ),
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
+
+    return update_quiz_answer_block(
+        content_html=content_html,
+        game_cfg=game_cfg,
+        question=answer_data.get("question"),
+        answer=answer_data.get("answer"),
+    )
+
+
+# def build_content(game_cfg, cfg, date_str, question, answer, crypto_snapshot_html):
+#     readable_date = target_date_readable(cfg["timezone"])
+
+#     with open(game_cfg["template_file"], "r", encoding="utf-8") as f:
+#         template = f.read()
+
+#     content = replace_date_vars(template, date_str, readable_date)
+#     content = content.replace("{{CRYPTO_SNAPSHOT}}", crypto_snapshot_html)
+
+#     content = update_quiz_answer_block(
+#         content_html=content,
+#         game_cfg=game_cfg,
+#         question=question,
+#         answer=answer,
+#     )
+
+#     return auto_link_html(content, cfg)
+
+def build_content(
+    game_cfg,
+    cfg,
+    date_str,
+    answer_data,
+    crypto_snapshot_html,
+):
+    readable_date = target_date_readable(
+        cfg["timezone"]
+    )
+
+    with open(
+        game_cfg["template_file"],
+        "r",
+        encoding="utf-8",
+    ) as f:
+        template = f.read()
+
+    content = replace_date_vars(
+        template,
+        date_str,
+        readable_date,
+    )
+
+    content = content.replace(
+        "{{CRYPTO_SNAPSHOT}}",
+        crypto_snapshot_html,
+    )
+
+    answer_type = answer_data.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "hamster_cipher":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"Template must contain exactly one "
+                f"{placeholder}. Found: {placeholder_count}"
+            )
+
+        answer_area_html = build_hamster_cipher_answer_area(
+            readable_date=readable_date,
+            word=answer_data.get("word"),
+            simplified_lines=answer_data.get(
+                "simplified_lines",
+                [],
+            ),
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    else:
+        content = update_quiz_answer_block(
+            content_html=content,
+            game_cfg=game_cfg,
+            question=answer_data.get("question"),
+            answer=answer_data.get("answer"),
+        )
+
+    return auto_link_html(
+        content,
+        cfg,
+    )
 
 
 # def create_wp_post(cfg, game_cfg, title, slug, content):
@@ -783,7 +1118,34 @@ def process_game(cfg, ws, game_cfg):
     )
     source_content = source.get("content", {}).get("rendered", "")
 
-    question, answer = extract_question_answer(source_content, game_cfg, cfg)
+    # question, answer = extract_question_answer(source_content, game_cfg, cfg)
+
+    answer_data = extract_game_answer_data(
+        content_html=source_content,
+        game_cfg=game_cfg,
+        cfg=cfg,
+    )
+    
+    question = answer_data.get(
+        "question",
+        "",
+    )
+    
+    answer = answer_data.get(
+        "answer",
+        "",
+    )
+    
+    current_check_value = answer_data.get(
+        "check_value",
+        "",
+    )
+    
+    print(
+        f"Extracted answer type: "
+        f"{answer_data.get('answer_type')}"
+    )
+    print(f"Extracted check value: {current_check_value}")
 
     row_idx, row = find_log_row(ws, date_str, game_key)
 
@@ -806,7 +1168,10 @@ def process_game(cfg, ws, game_cfg):
         latest_sheet_check_answer = get_latest_check_answer_for_game(ws, game_key)
         initial_check_answer = latest_sheet_check_answer or game_cfg.get("check_answer", "")
         
-        answer_changed = should_update_answer(answer, initial_check_answer)
+        answer_changed = should_update_answer(
+            current_check_value,
+            initial_check_answer,
+        )
 
         crypto_data = fetch_crypto_data(cfg)
         base_snapshot = make_base_snapshot(crypto_data)
@@ -823,23 +1188,22 @@ def process_game(cfg, ws, game_cfg):
         #     log_status = "created_waiting_answer"
         #     new_check_answer = initial_check_answer
 
-        if answer_changed and source_is_today_target:
-            publish_question = question
-            publish_answer = answer
-            log_status = "created_with_target_date_answer"
-            new_check_answer = answer
-        else:
-            publish_question = "Updating soon."
-            publish_answer = "Updating soon."
-            log_status = "created_waiting_target_date_answer"
-            new_check_answer = initial_check_answer
+    if answer_changed and source_is_today_target:
+        publish_data = answer_data
+        log_status = "created_with_target_date_answer"
+        new_check_answer = current_check_value
+    else:
+        publish_data = make_waiting_answer_data(
+            game_cfg
+        )
+        log_status = "created_waiting_target_date_answer"
+        new_check_answer = initial_check_answer
 
         content = build_content(
             game_cfg=game_cfg,
             cfg=cfg,
             date_str=date_str,
-            question=publish_question,
-            answer=publish_answer,
+            answer_data=publish_data,
             crypto_snapshot_html=crypto_snapshot_html,
         )
 
@@ -856,8 +1220,14 @@ def process_game(cfg, ws, game_cfg):
             "post_url": post_url,
             "slug": slug,
             "source_modified": source_modified,
-            "question": publish_question,
-            "answer": publish_answer,
+            "question": publish_data.get(
+                "question",
+                "",
+            ),
+            "answer": publish_data.get(
+                "answer",
+                "",
+            ),
             "check_answer": new_check_answer,
             "status": log_status,
             "created_at": timestamp,
@@ -875,8 +1245,24 @@ def process_game(cfg, ws, game_cfg):
     if not post_id:
         raise RuntimeError(f"Missing post_id in sheet for {game_key} {date_str}")
 
-    sheet_check_answer = row.get("check_answer") or ""
-    answer_changed = should_update_answer(answer, sheet_check_answer)
+    sheet_check_answer = (
+        row.get("check_answer")
+        or ""
+    )
+    
+    answer_changed = should_update_answer(
+        current_check_value,
+        sheet_check_answer,
+    )
+    
+    row_answer_norm = normalize_answer(
+        row.get("answer") or ""
+    ).lower().rstrip(".")
+    
+    row_is_waiting = row_answer_norm in {
+        "",
+        "updating soon",
+    }
 
     # if not answer_changed:
     #     print("Answer unchanged. No post update needed.")
@@ -898,7 +1284,7 @@ def process_game(cfg, ws, game_cfg):
         })
         return
 
-    if not answer_changed:
+    if not answer_changed and not row_is_waiting:
         print("Answer unchanged. No post update needed.")
         update_log_row(ws, row_idx, {
             "source_modified": source_modified,
@@ -915,11 +1301,11 @@ def process_game(cfg, ws, game_cfg):
         or existing_post.get("content", {}).get("rendered", "")
     )
 
-    updated_content = update_quiz_answer_block(
+    updated_content = update_existing_answer_content(
         content_html=existing_content,
         game_cfg=game_cfg,
-        question=question,
-        answer=answer,
+        answer_data=answer_data,
+        readable_date=readable_date,
     )
 
     updated_content = auto_link_html(updated_content, cfg)
@@ -928,9 +1314,15 @@ def process_game(cfg, ws, game_cfg):
 
     update_log_row(ws, row_idx, {
         "source_modified": source_modified,
-        "question": question,
-        "answer": answer,
-        "check_answer": answer,
+        "question": answer_data.get(
+            "question",
+            "",
+        ),
+        "answer": answer_data.get(
+            "answer",
+            "",
+        ),
+        "check_answer": current_check_value,
         "status": "updated_with_new_answer",
         "updated_at": timestamp,
     })
