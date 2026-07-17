@@ -103,6 +103,30 @@ games:
     slug_format: "dropee-question-of-the-day-answer-today-{{CURRENT_DATE_SLUG}}"
     seo_title_format: "Dropee Question of the Day Answer Today ({{CURRENT_DATE_READABLE}})"
     meta_description_format: "Dropee Question of the Day answer today, updated daily. Copy the correct answer, paste it into Dropee Bot, and claim free $DROPEE tokens in seconds."
+
+  - game_key: "hamster_cipher"
+    answer_type: "hamster_cipher"
+    enabled: true
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/3119"
+    template_file: "games/hamster-cipher.txt"
+    featured_media_id: 338324
+  
+    word_selector: "p.wp-block-paragraph"
+    word_prefix: "Word"
+  
+    simplified_label_selector: "p.wp-block-paragraph"
+    simplified_prefix: "Simplified"
+  
+    answer_placeholder: "{{ANSWER_AREA}}"
+    answer_area_id: "answer-area"
+  
+    check_answer: "DUST"
+  
+    title_format: "Today’s Hamster Kombat Daily Combo Answer - {{CURRENT_DATE_READABLE}}"
+    slug_format: "hamster-kombat-daily-combo-{{CURRENT_DATE_SLUG}}"
+    seo_title_format: "Hamster Kombat Daily Combo ({{CURRENT_DATE_READABLE}}): Today’s Cipher Code"
+    meta_description_format: "Find today's Hamster Kombat Daily Combo for {{CURRENT_DATE_READABLE}}, including the latest Daily Cipher code. Get the exact Hold/Tap pattern for the GameDev puzzle and claim your $HMSTR reward."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
