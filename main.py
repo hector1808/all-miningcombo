@@ -4,6 +4,7 @@ import json
 import base64
 import html
 import time
+import hashlib
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -105,20 +106,45 @@ def get_target_date(tz_name):
 
 #     return publish_dt.isoformat()
 
-def scheduled_publish_datetime(tz_name):
-    today = now_local(tz_name).date()
+def scheduled_publish_datetime(
+    tz_name,
+    game_cfg,
+    target_date,
+):
+    post_cycle = game_cfg.get(
+        "post_cycle",
+        "daily",
+    )
 
-    publish_dt = datetime(
-        today.year,
-        today.month,
-        today.day,
-        22,
-        0,
+    publish_time = game_cfg.get(
+        "publish_time",
+        "22:00",
+    )
+
+    hour, minute = map(
+        int,
+        publish_time.split(":"),
+    )
+
+    if post_cycle == "weekly":
+        publish_date = target_date
+    else:
+        # Giữ nguyên hành vi daily hiện tại:
+        # create vào sáng hôm nay,
+        # publish lúc 22:00 hôm nay.
+        publish_date = now_local(
+            tz_name
+        ).date()
+
+    return datetime(
+        publish_date.year,
+        publish_date.month,
+        publish_date.day,
+        hour,
+        minute,
         0,
         tzinfo=ZoneInfo(tz_name),
     )
-
-    return publish_dt.isoformat()
 
 def target_date_str(tz_name):
     return get_target_date(tz_name).isoformat()
@@ -132,6 +158,91 @@ def target_date_slug(tz_name):
     d = get_target_date(tz_name)
 
     return f"{d.day}-{d.strftime('%B').lower()}-{d.year}"
+
+def format_date_readable(date_value):
+    return (
+        f"{date_value.strftime('%B')} "
+        f"{date_value.day}, "
+        f"{date_value.year}"
+    )
+
+
+def format_date_slug(date_value):
+    return (
+        f"{date_value.day}-"
+        f"{date_value.strftime('%B').lower()}-"
+        f"{date_value.year}"
+    )
+
+
+def get_recent_sunday(tz_name):
+    """
+    Trả về ngày Chủ nhật gần nhất.
+
+    Nếu hôm nay là Chủ nhật:
+        trả về chính hôm nay.
+
+    Nếu hôm nay là thứ Hai đến thứ Bảy:
+        trả về Chủ nhật vừa qua.
+    """
+    today = now_local(tz_name).date()
+
+    # weekday():
+    # Monday = 0
+    # Sunday = 6
+    days_since_sunday = (today.weekday() + 1) % 7
+
+    return today - timedelta(days=days_since_sunday)
+
+
+def get_game_target_date(tz_name, game_cfg):
+    post_cycle = game_cfg.get("post_cycle", "daily")
+
+    if post_cycle == "weekly":
+        return get_recent_sunday(tz_name)
+
+    return get_target_date(tz_name)
+
+
+def get_week_campaign_dates(publish_sunday):
+    """
+    Ví dụ:
+    publish_sunday = 2026-07-12
+
+    campaign_start = 2026-07-13
+    campaign_end   = 2026-07-19
+    """
+    campaign_start = publish_sunday + timedelta(days=1)
+    campaign_end = publish_sunday + timedelta(days=7)
+
+    return campaign_start, campaign_end
+
+
+def format_date_range_readable(start_date, end_date):
+    if start_date.year == end_date.year:
+        return (
+            f"{start_date.strftime('%B')} {start_date.day} "
+            f"to {end_date.strftime('%B')} {end_date.day}, "
+            f"{end_date.year}"
+        )
+
+    return (
+        f"{start_date.strftime('%B')} {start_date.day}, "
+        f"{start_date.year} to "
+        f"{end_date.strftime('%B')} {end_date.day}, "
+        f"{end_date.year}"
+    )
+
+
+def format_date_range_slug(start_date, end_date):
+    return (
+        f"{start_date.day}-"
+        f"{start_date.strftime('%B').lower()}-"
+        f"{start_date.year}-to-"
+        f"{end_date.day}-"
+        f"{end_date.strftime('%B').lower()}-"
+        f"{end_date.year}"
+    )
 
 
 def get_latest_check_answer_for_game(ws, game_key):
@@ -161,6 +272,26 @@ def replace_date_vars(text, date_str, readable_date=None, slug_date=None):
 
     if slug_date:
         text = text.replace("{{CURRENT_DATE_SLUG}}", slug_date)
+
+    return text
+
+def replace_game_vars(
+    text,
+    date_str,
+    readable_date,
+    slug_date,
+    extra_vars=None,
+):
+    text = replace_date_vars(
+        text=text,
+        date_str=date_str,
+        readable_date=readable_date,
+        slug_date=slug_date,
+    )
+
+    for key, value in (extra_vars or {}).items():
+        placeholder = "{{" + key + "}}"
+        text = text.replace(placeholder, str(value))
 
     return text
 
@@ -221,6 +352,7 @@ def get_sheet(cfg):
         "question",
         "answer",
         "check_answer",
+        "verified_date",
         "status",
         "created_at",
         "updated_at",
@@ -364,6 +496,162 @@ def extract_question_answer(content_html, game_cfg, cfg):
 
     return question, answer
 
+def extract_binance_wotd(content_html):
+    soup = BeautifulSoup(content_html, "html.parser")
+
+    theme = ""
+    reward = ""
+    campaign_start = None
+    campaign_end = None
+    answer_groups = {}
+
+    # Tìm paragraph chứa Theme và Date.
+    summary_p = None
+
+    for p in soup.select("p.wp-block-paragraph"):
+        text = p.get_text(" ", strip=True)
+
+        if (
+            re.search(r"\bTheme\s*:", text, flags=re.I)
+            and re.search(r"\bDate\s*:", text, flags=re.I)
+        ):
+            summary_p = p
+            break
+
+    if summary_p:
+        summary_text = html.unescape(
+            summary_p.get_text(" ", strip=True)
+        )
+
+        theme_match = re.search(
+            r"Theme\s*:\s*(.*?)\s+Date\s*:",
+            summary_text,
+            flags=re.I,
+        )
+
+        if theme_match:
+            theme = theme_match.group(1).strip()
+
+        date_match = re.search(
+            r"Date\s*:\s*"
+            r"(\d{4}-\d{2}-\d{2})"
+            r"\s+to\s+"
+            r"(\d{4}-\d{2}-\d{2})",
+            summary_text,
+            flags=re.I,
+        )
+
+        if date_match:
+            campaign_start = datetime.fromisoformat(
+                date_match.group(1)
+            ).date()
+
+            campaign_end = datetime.fromisoformat(
+                date_match.group(2)
+            ).date()
+
+        # Ưu tiên tìm mark chứa "to be shared".
+        for mark in summary_p.find_all("mark"):
+            mark_text = mark.get_text(" ", strip=True)
+
+            if "to be shared" in mark_text.lower():
+                reward = mark_text
+                break
+
+        # Fallback nếu reward không nằm trong mark.
+        if not reward:
+            reward_match = re.search(
+                r"([0-9][A-Za-z0-9 .,+-]*?"
+                r"\bto be shared!?)",
+                summary_text,
+                flags=re.I,
+            )
+
+            if reward_match:
+                reward = reward_match.group(1).strip()
+
+    # Lấy các nhóm đáp án 3-8 letters.
+    for h3 in soup.find_all("h3"):
+        heading_text = html.unescape(
+            h3.get_text(" ", strip=True)
+        )
+
+        length_match = re.search(
+            r"Answer\s+(\d+)\s+letters",
+            heading_text,
+            flags=re.I,
+        )
+
+        if not length_match:
+            continue
+
+        word_length = length_match.group(1)
+
+        answer_list = h3.find_next_sibling("ul")
+
+        if not answer_list:
+            answer_list = h3.find_next("ul")
+
+        answers = []
+
+        if answer_list:
+            answers = [
+                li.get_text(" ", strip=True)
+                for li in answer_list.find_all(
+                    "li",
+                    recursive=False,
+                )
+                if li.get_text(" ", strip=True)
+            ]
+
+        answer_groups[word_length] = answers
+
+    return {
+        "theme": theme,
+        "reward": reward,
+        "campaign_start": campaign_start,
+        "campaign_end": campaign_end,
+        "answer_groups": answer_groups,
+    }
+
+def make_binance_wotd_signature(answer_data):
+    campaign_start = answer_data.get(
+        "campaign_start"
+    )
+    campaign_end = answer_data.get(
+        "campaign_end"
+    )
+
+    payload = {
+        "theme": answer_data.get("theme") or "",
+        "reward": answer_data.get("reward") or "",
+        "campaign_start": (
+            campaign_start.isoformat()
+            if campaign_start
+            else ""
+        ),
+        "campaign_end": (
+            campaign_end.isoformat()
+            if campaign_end
+            else ""
+        ),
+        "answer_groups": answer_data.get(
+            "answer_groups",
+            {},
+        ),
+    }
+
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return hashlib.sha256(
+        serialized.encode("utf-8")
+    ).hexdigest()
+
 def find_label_element(soup, selector, prefix):
     """
     Tìm element chỉ chứa label, ví dụ:
@@ -471,6 +759,44 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             "simplified_lines": simplified_lines,
         }
 
+    if answer_type == "binance_wotd":
+        wotd_data = extract_binance_wotd(
+            content_html
+        )
+    
+        signature = make_binance_wotd_signature(
+            wotd_data
+        )
+    
+        answer_groups_json = json.dumps(
+            wotd_data.get("answer_groups", {}),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    
+        return {
+            "answer_type": "binance_wotd",
+    
+            # Dữ liệu chung dùng cho Sheet.
+            "question": wotd_data.get("theme", ""),
+            "answer": answer_groups_json,
+            "check_value": signature,
+    
+            # Dữ liệu riêng của Binance WOTD.
+            "theme": wotd_data.get("theme", ""),
+            "reward": wotd_data.get("reward", ""),
+            "campaign_start": wotd_data.get(
+                "campaign_start"
+            ),
+            "campaign_end": wotd_data.get(
+                "campaign_end"
+            ),
+            "answer_groups": wotd_data.get(
+                "answer_groups",
+                {},
+            ),
+        }
+
     if answer_type == "question_answer":
         question, answer = extract_question_answer(
             content_html=content_html,
@@ -490,11 +816,60 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
     )
 
 
-def make_waiting_answer_data(game_cfg):
+# def make_waiting_answer_data(game_cfg):
+#     answer_type = game_cfg.get(
+#         "answer_type",
+#         "question_answer",
+#     )
+
+#     if answer_type == "hamster_cipher":
+#         return {
+#             "answer_type": "hamster_cipher",
+#             "question": "Updating soon.",
+#             "answer": "Updating soon.",
+#             "check_value": "",
+#             "word": "Updating soon.",
+#             "simplified_lines": [],
+#         }
+
+#     return {
+#         "answer_type": "question_answer",
+#         "question": "Updating soon.",
+#         "answer": "Updating soon.",
+#         "check_value": "",
+#     }
+
+def make_waiting_answer_data(
+    game_cfg,
+    campaign_start=None,
+    campaign_end=None,
+):
     answer_type = game_cfg.get(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "binance_wotd":
+        empty_groups = {
+            str(length): []
+            for length in range(3, 9)
+        }
+
+        return {
+            "answer_type": "binance_wotd",
+            "question": "Updating soon.",
+            "answer": json.dumps(
+                empty_groups,
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            "check_value": "",
+            "theme": "Updating soon.",
+            "reward": "Updating soon.",
+            "campaign_start": campaign_start,
+            "campaign_end": campaign_end,
+            "answer_groups": empty_groups,
+        }
 
     if answer_type == "hamster_cipher":
         return {
@@ -740,6 +1115,152 @@ def build_hamster_cipher_answer_area(
         f'<p>{sequence_html}</p>'
     )
 
+def build_binance_wotd_answer_area(
+    answer_data,
+    last_verified_date=None,
+):
+    campaign_start = answer_data.get(
+        "campaign_start"
+    )
+    campaign_end = answer_data.get(
+        "campaign_end"
+    )
+
+    if campaign_start and campaign_end:
+        campaign_range = format_date_range_readable(
+            campaign_start,
+            campaign_end,
+        )
+    else:
+        campaign_range = "Updating soon."
+
+    theme = html.escape(
+        str(
+            answer_data.get("theme")
+            or "Updating soon."
+        )
+    )
+
+    reward = html.escape(
+        str(
+            answer_data.get("reward")
+            or "Updating soon."
+        )
+    )
+
+    if last_verified_date:
+        verified_text = format_date_readable(
+            last_verified_date
+        )
+    else:
+        verified_text = "Updating soon."
+
+    answer_groups = answer_data.get(
+        "answer_groups",
+        {},
+    )
+
+    html_parts = []
+
+    html_parts.append(
+        "<h2><strong>"
+        "Binance Word of the Day (WOTD) "
+        f"Answer Today – {html.escape(campaign_range)}"
+        "</strong></h2>"
+    )
+
+    html_parts.append(
+        "<p><strong>Campaign Theme:</strong> "
+        f"{theme}</p>"
+    )
+
+    html_parts.append(
+        "<p><strong>Activity Dates:</strong> "
+        f"{html.escape(campaign_range)}</p>"
+    )
+
+    html_parts.append(
+        "<p><strong>Last Verified:</strong> "
+        f"{html.escape(verified_text)}</p>"
+    )
+
+    html_parts.append(
+        "<p><strong>Prize pool:</strong> "
+        f"{reward}</p>"
+    )
+
+    html_parts.append(
+        "<p><strong>"
+        "How Many Letters Is the Word "
+        "You Are Searching For?"
+        "</strong></p>"
+    )
+
+    # Danh sách link nhảy xuống heading.
+    navigation_items = []
+
+    for length in range(3, 9):
+        anchor_id = (
+            f"binance-wotd-{length}-letters"
+        )
+
+        navigation_items.append(
+            "<li>"
+            f'<a href="#{anchor_id}">'
+            "<strong>"
+            "Binance Word of the Day "
+            f"{length} letters today"
+            "</strong>"
+            "</a>"
+            "</li>"
+        )
+
+    html_parts.append(
+        "<ul>\n"
+        + "\n".join(navigation_items)
+        + "\n</ul>"
+    )
+
+    # Heading + answers.
+    for length in range(3, 9):
+        length_key = str(length)
+
+        anchor_id = (
+            f"binance-wotd-{length}-letters"
+        )
+
+        html_parts.append(
+            f'<h3 id="{anchor_id}">'
+            "<strong>"
+            "Binance Word of the Day "
+            f"{length} Letters Answers"
+            "</strong>"
+            "</h3>"
+        )
+
+        answers = answer_groups.get(
+            length_key,
+            [],
+        )
+
+        if answers:
+            list_items = [
+                f"<li>{html.escape(str(answer))}</li>"
+                for answer in answers
+            ]
+        else:
+            list_items = [
+                "<li>Updating soon.</li>"
+            ]
+
+        html_parts.append(
+            "<ul>\n"
+            + "\n".join(list_items)
+            + "\n</ul>"
+        )
+
+    return "\n".join(html_parts)
+
 
 def replace_answer_area(
     content_html,
@@ -783,16 +1304,63 @@ def replace_answer_area(
     return str(soup)
 
 
+# def update_existing_answer_content(
+#     content_html,
+#     game_cfg,
+#     answer_data,
+#     readable_date,
+# ):
+#     answer_type = answer_data.get(
+#         "answer_type",
+#         "question_answer",
+#     )
+
+#     if answer_type == "hamster_cipher":
+#         answer_area_html = build_hamster_cipher_answer_area(
+#             readable_date=readable_date,
+#             word=answer_data.get("word"),
+#             simplified_lines=answer_data.get(
+#                 "simplified_lines",
+#                 [],
+#             ),
+#         )
+
+#         return replace_answer_area(
+#             content_html=content_html,
+#             game_cfg=game_cfg,
+#             answer_area_html=answer_area_html,
+#         )
+
+#     return update_quiz_answer_block(
+#         content_html=content_html,
+#         game_cfg=game_cfg,
+#         question=answer_data.get("question"),
+#         answer=answer_data.get("answer"),
+#     )
+
 def update_existing_answer_content(
     content_html,
     game_cfg,
     answer_data,
-    readable_date,
+    readable_date=None,
+    last_verified_date=None,
 ):
     answer_type = answer_data.get(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "binance_wotd":
+        answer_area_html = build_binance_wotd_answer_area(
+            answer_data=answer_data,
+            last_verified_date=last_verified_date,
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
 
     if answer_type == "hamster_cipher":
         answer_area_html = build_hamster_cipher_answer_area(
@@ -842,35 +1410,78 @@ def build_content(
     date_str,
     answer_data,
     crypto_snapshot_html,
+    readable_date=None,
+    slug_date=None,
+    extra_vars=None,
 ):
-    readable_date = target_date_readable(
-        cfg["timezone"]
-    )
+    """
+    Build toàn bộ content từ template.
+
+    Hỗ trợ:
+    - question_answer
+    - hamster_cipher
+    - binance_wotd
+    """
+
+    # -----------------------------------------------------
+    # 1. Fallback cho game daily cũ
+    # -----------------------------------------------------
+    if readable_date is None:
+        readable_date = target_date_readable(
+            cfg["timezone"]
+        )
+
+    if slug_date is None:
+        slug_date = target_date_slug(
+            cfg["timezone"]
+        )
+
+    # -----------------------------------------------------
+    # 2. Đọc template của game
+    # -----------------------------------------------------
+    template_file = game_cfg["template_file"]
 
     with open(
-        game_cfg["template_file"],
+        template_file,
         "r",
         encoding="utf-8",
     ) as f:
         template = f.read()
 
-    content = replace_date_vars(
-        template,
-        date_str,
-        readable_date,
+    # -----------------------------------------------------
+    # 3. Thay toàn bộ biến ngày
+    # -----------------------------------------------------
+    content = replace_game_vars(
+        text=template,
+        date_str=date_str,
+        readable_date=readable_date,
+        slug_date=slug_date,
+        extra_vars=extra_vars,
     )
 
+    # -----------------------------------------------------
+    # 4. Chèn crypto snapshot
+    # -----------------------------------------------------
     content = content.replace(
         "{{CRYPTO_SNAPSHOT}}",
-        crypto_snapshot_html,
+        crypto_snapshot_html or "",
     )
 
+    # -----------------------------------------------------
+    # 5. Xác định loại answer
+    # -----------------------------------------------------
     answer_type = answer_data.get(
         "answer_type",
-        "question_answer",
+        game_cfg.get(
+            "answer_type",
+            "question_answer",
+        ),
     )
 
-    if answer_type == "hamster_cipher":
+    # =====================================================
+    # BINANCE WORD OF THE DAY
+    # =====================================================
+    if answer_type == "binance_wotd":
         placeholder = game_cfg.get(
             "answer_placeholder",
             "{{ANSWER_AREA}}",
@@ -882,17 +1493,18 @@ def build_content(
 
         if placeholder_count != 1:
             raise RuntimeError(
-                f"Template must contain exactly one "
-                f"{placeholder}. Found: {placeholder_count}"
+                f"Binance WOTD template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
             )
 
-        answer_area_html = build_hamster_cipher_answer_area(
-            readable_date=readable_date,
-            word=answer_data.get("word"),
-            simplified_lines=answer_data.get(
-                "simplified_lines",
-                [],
-            ),
+        answer_area_html = (
+            build_binance_wotd_answer_area(
+                answer_data=answer_data,
+                last_verified_date=answer_data.get(
+                    "last_verified_date"
+                ),
+            )
         )
 
         content = content.replace(
@@ -901,14 +1513,69 @@ def build_content(
             1,
         )
 
-    else:
+    # =====================================================
+    # HAMSTER CIPHER
+    # =====================================================
+    elif answer_type == "hamster_cipher":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"Hamster Cipher template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
+            )
+
+        answer_area_html = (
+            build_hamster_cipher_answer_area(
+                readable_date=readable_date,
+                word=answer_data.get(
+                    "word"
+                ),
+                simplified_lines=answer_data.get(
+                    "simplified_lines",
+                    [],
+                ),
+            )
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    # =====================================================
+    # GAME QUESTION / ANSWER THÔNG THƯỜNG
+    # =====================================================
+    elif answer_type == "question_answer":
         content = update_quiz_answer_block(
             content_html=content,
             game_cfg=game_cfg,
-            question=answer_data.get("question"),
-            answer=answer_data.get("answer"),
+            question=answer_data.get(
+                "question"
+            ),
+            answer=answer_data.get(
+                "answer"
+            ),
         )
 
+    else:
+        raise RuntimeError(
+            f"Unsupported answer_type "
+            f"in build_content: {answer_type}"
+        )
+
+    # -----------------------------------------------------
+    # 6. Chèn internal links tự động
+    # -----------------------------------------------------
     return auto_link_html(
         content,
         cfg,
@@ -946,7 +1613,7 @@ def build_content(
 #     return r.json()
 
 
-def create_wp_post(cfg, game_cfg, title, slug, content):
+def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
     run_mode = os.getenv("RUN_MODE", "update").lower()
@@ -962,8 +1629,24 @@ def create_wp_post(cfg, game_cfg, title, slug, content):
     }
 
     if run_mode == "create":
-        payload["status"] = "future"
-        payload["date"] = scheduled_publish_datetime(cfg["timezone"])
+        publish_dt = scheduled_publish_datetime(
+            tz_name=cfg["timezone"],
+            game_cfg=game_cfg,
+            target_date=target_date,
+        )
+    
+        current_dt = now_local(
+            cfg["timezone"]
+        )
+    
+        if publish_dt > current_dt:
+            payload["status"] = "future"
+            payload["date"] = (
+                publish_dt.isoformat()
+            )
+        else:
+            # Manual create sau thời điểm publish.
+            payload["status"] = "publish"
     else:
         payload["status"] = "publish"
 
@@ -1067,9 +1750,58 @@ def process_game(cfg, ws, game_cfg):
         return
 
     game_key = game_cfg["game_key"]
-    date_str = target_date_str(cfg["timezone"])
-    readable_date = target_date_readable(cfg["timezone"])
-    slug_date = target_date_slug(cfg["timezone"])
+    # date_str = target_date_str(cfg["timezone"])
+    # readable_date = target_date_readable(cfg["timezone"])
+    # slug_date = target_date_slug(cfg["timezone"])
+    target_date_obj = get_game_target_date(
+        cfg["timezone"],
+        game_cfg,
+    )
+    
+    date_str = target_date_obj.isoformat()
+    readable_date = format_date_readable(
+        target_date_obj
+    )
+    slug_date = format_date_slug(
+        target_date_obj
+    )
+    
+    post_cycle = game_cfg.get(
+        "post_cycle",
+        "daily",
+    )
+    
+    campaign_start = None
+    campaign_end = None
+    extra_vars = {}
+    
+    if post_cycle == "weekly":
+        campaign_start, campaign_end = (
+            get_week_campaign_dates(
+                target_date_obj
+            )
+        )
+    
+        extra_vars = {
+            "CAMPAIGN_START_DATE": (
+                campaign_start.isoformat()
+            ),
+            "CAMPAIGN_END_DATE": (
+                campaign_end.isoformat()
+            ),
+            "CAMPAIGN_DATE_READABLE": (
+                format_date_range_readable(
+                    campaign_start,
+                    campaign_end,
+                )
+            ),
+            "CAMPAIGN_DATE_SLUG": (
+                format_date_range_slug(
+                    campaign_start,
+                    campaign_end,
+                )
+            ),
+        }
     timestamp = now_local(cfg["timezone"]).isoformat(timespec="seconds")
 
     # title = replace_date_vars(game_cfg["title_format"], date_str, readable_date)
@@ -1077,36 +1809,40 @@ def process_game(cfg, ws, game_cfg):
     # seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str, readable_date)
     # meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str, readable_date)
 
-    title = replace_date_vars(
-        game_cfg["title_format"],
-        date_str,
-        readable_date,
-        slug_date,
+    title = replace_game_vars(
+        text=game_cfg["title_format"],
+        date_str=date_str,
+        readable_date=readable_date,
+        slug_date=slug_date,
+        extra_vars=extra_vars,
     )
     
     slug = normalize_slug(
-        replace_date_vars(
-            game_cfg["slug_format"],
-            date_str,
-            readable_date,
-            slug_date,
+        replace_game_vars(
+            text=game_cfg["slug_format"],
+            date_str=date_str,
+            readable_date=readable_date,
+            slug_date=slug_date,
+            extra_vars=extra_vars,
         )
     )
     
-    seo_title = replace_date_vars(
-        game_cfg["seo_title_format"],
-        date_str,
-        readable_date,
-        slug_date,
+    seo_title = replace_game_vars(
+        text=game_cfg["seo_title_format"],
+        date_str=date_str,
+        readable_date=readable_date,
+        slug_date=slug_date,
+        extra_vars=extra_vars,
     )
     
-    meta_description = replace_date_vars(
-        game_cfg["meta_description_format"],
-        date_str,
-        readable_date,
-        slug_date,
+    meta_description = replace_game_vars(
+        text=game_cfg["meta_description_format"],
+        date_str=date_str,
+        readable_date=readable_date,
+        slug_date=slug_date,
+        extra_vars=extra_vars,
     )
-
+    
     print(f"Processing {game_key} for {date_str}")
 
     source = fetch_source_page(game_cfg["source_api_url"])
@@ -1140,6 +1876,21 @@ def process_game(cfg, ws, game_cfg):
         "check_value",
         "",
     )
+
+    source_matches_target_week = False
+
+    if post_cycle == "weekly":
+        source_campaign_start = answer_data.get(
+            "campaign_start"
+        )
+        source_campaign_end = answer_data.get(
+            "campaign_end"
+        )
+    
+        source_matches_target_week = (
+            source_campaign_start == campaign_start
+            and source_campaign_end == campaign_end
+        )
     
     print(
         f"Extracted answer type: "
@@ -1161,58 +1912,176 @@ def process_game(cfg, ws, game_cfg):
 
     if not row:
         print("No sheet log found. First run for this game/date.")
-
-        # initial_check_answer = game_cfg.get("check_answer", "")
-        # answer_changed = should_update_answer(answer, initial_check_answer)
-
-        latest_sheet_check_answer = get_latest_check_answer_for_game(ws, game_key)
-        initial_check_answer = latest_sheet_check_answer or game_cfg.get("check_answer", "")
-        
+    
+        # =========================================================
+        # WEEKLY GAME CREATE
+        # =========================================================
+        if post_cycle == "weekly":
+            today_date = now_local(
+                cfg["timezone"]
+            ).date()
+    
+            if source_matches_target_week:
+                publish_data = answer_data.copy()
+                publish_data["last_verified_date"] = today_date
+    
+                new_check_answer = current_check_value
+                verified_date = today_date.isoformat()
+                log_status = "created_with_weekly_answers"
+    
+            else:
+                publish_data = make_waiting_answer_data(
+                    game_cfg=game_cfg,
+                    campaign_start=campaign_start,
+                    campaign_end=campaign_end,
+                )
+    
+                publish_data["last_verified_date"] = None
+    
+                new_check_answer = ""
+                verified_date = ""
+                log_status = "created_waiting_weekly_source"
+    
+            crypto_data = fetch_crypto_data(cfg)
+            base_snapshot = make_base_snapshot(crypto_data)
+    
+            crypto_snapshot_html = rewrite_snapshot_with_openai(
+                cfg,
+                game_key,
+                base_snapshot,
+            )
+    
+            content = build_content(
+                game_cfg=game_cfg,
+                cfg=cfg,
+                date_str=date_str,
+                answer_data=publish_data,
+                crypto_snapshot_html=crypto_snapshot_html,
+                readable_date=readable_date,
+                slug_date=slug_date,
+                extra_vars=extra_vars,
+            )
+    
+            post = create_wp_post(
+                cfg=cfg,
+                game_cfg=game_cfg,
+                title=title,
+                slug=slug,
+                content=content,
+                target_date=target_date_obj,
+            )
+    
+            post_id = post["id"]
+            post_url = post.get("link", "")
+    
+            update_rankmath_meta(
+                cfg,
+                post_id,
+                seo_title,
+                meta_description,
+            )
+    
+            append_log_row(ws, {
+                "target_date": date_str,
+                "game_key": game_key,
+                "post_id": post_id,
+                "post_url": post_url,
+                "slug": slug,
+                "source_modified": source_modified,
+                "question": publish_data.get(
+                    "question",
+                    "",
+                ),
+                "answer": publish_data.get(
+                    "answer",
+                    "",
+                ),
+                "check_answer": new_check_answer,
+                "verified_date": verified_date,
+                "status": log_status,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            })
+    
+            print(
+                f"Created weekly post {post_id}: "
+                f"{post_url}"
+            )
+            print(f"Status: {log_status}")
+            return
+    
+        # =========================================================
+        # DAILY GAME CREATE
+        # =========================================================
+        latest_sheet_check_answer = (
+            get_latest_check_answer_for_game(
+                ws,
+                game_key,
+            )
+        )
+    
+        initial_check_answer = (
+            latest_sheet_check_answer
+            or game_cfg.get("check_answer", "")
+        )
+    
         answer_changed = should_update_answer(
             current_check_value,
             initial_check_answer,
         )
-
+    
         crypto_data = fetch_crypto_data(cfg)
         base_snapshot = make_base_snapshot(crypto_data)
-        crypto_snapshot_html = rewrite_snapshot_with_openai(cfg, game_key, base_snapshot)
-
-        # if answer_changed:
-        #     publish_question = question
-        #     publish_answer = answer
-        #     log_status = "created_with_new_answer"
-        #     new_check_answer = answer
-        # else:
-        #     publish_question = "Updating soon."
-        #     publish_answer = "Updating soon."
-        #     log_status = "created_waiting_answer"
-        #     new_check_answer = initial_check_answer
-
-    if answer_changed and source_is_today_target:
-        publish_data = answer_data
-        log_status = "created_with_target_date_answer"
-        new_check_answer = current_check_value
-    else:
-        publish_data = make_waiting_answer_data(
-            game_cfg
+    
+        crypto_snapshot_html = rewrite_snapshot_with_openai(
+            cfg,
+            game_key,
+            base_snapshot,
         )
-        log_status = "created_waiting_target_date_answer"
-        new_check_answer = initial_check_answer
-
+    
+        if answer_changed and source_is_today_target:
+            publish_data = answer_data
+            log_status = "created_with_target_date_answer"
+            new_check_answer = current_check_value
+    
+        else:
+            publish_data = make_waiting_answer_data(
+                game_cfg
+            )
+            log_status = "created_waiting_target_date_answer"
+            new_check_answer = initial_check_answer
+    
+        # Phần này phải nằm ngoài else phía trên.
         content = build_content(
             game_cfg=game_cfg,
             cfg=cfg,
             date_str=date_str,
             answer_data=publish_data,
             crypto_snapshot_html=crypto_snapshot_html,
+            readable_date=readable_date,
+            slug_date=slug_date,
+            extra_vars=extra_vars,
         )
-
-        post = create_wp_post(cfg, game_cfg, title, slug, content)
+    
+        post = create_wp_post(
+            cfg=cfg,
+            game_cfg=game_cfg,
+            title=title,
+            slug=slug,
+            content=content,
+            target_date=target_date_obj,
+        )
+    
         post_id = post["id"]
         post_url = post.get("link", "")
-
-        update_rankmath_meta(cfg, post_id, seo_title, meta_description)
-
+    
+        update_rankmath_meta(
+            cfg,
+            post_id,
+            seo_title,
+            meta_description,
+        )
+    
         append_log_row(ws, {
             "target_date": date_str,
             "game_key": game_key,
@@ -1229,26 +2098,264 @@ def process_game(cfg, ws, game_cfg):
                 "",
             ),
             "check_answer": new_check_answer,
+            "verified_date": "",
             "status": log_status,
             "created_at": timestamp,
             "updated_at": timestamp,
         })
-
+    
         print(f"Created post {post_id}: {post_url}")
         print(f"Status: {log_status}")
         return
 
     print("Sheet log exists. Checking answer against check_answer from log.")
-
+    
     post_id = str(row.get("post_id") or "").strip()
-
+    
     if not post_id:
-        raise RuntimeError(f"Missing post_id in sheet for {game_key} {date_str}")
-
-    sheet_check_answer = (
-        row.get("check_answer")
-        or ""
-    )
+        raise RuntimeError(
+            f"Missing post_id in sheet for {game_key} {date_str}"
+        )
+        
+    # =========================================================
+    # WEEKLY GAME UPDATE
+    # =========================================================
+    if post_cycle == "weekly":
+        print(
+            f"Weekly update mode: checking {game_key} "
+            f"for campaign {campaign_start} to {campaign_end}"
+        )
+    
+        # -----------------------------------------------------
+        # 1. Kiểm tra source MiningCombo có đúng tuần hay không
+        # -----------------------------------------------------
+        if not source_matches_target_week:
+            source_campaign_start = answer_data.get(
+                "campaign_start"
+            )
+    
+            source_campaign_end = answer_data.get(
+                "campaign_end"
+            )
+    
+            print(
+                "Weekly source campaign does not match "
+                "the current target week."
+            )
+    
+            print(
+                f"Expected campaign: "
+                f"{campaign_start} to {campaign_end}"
+            )
+    
+            print(
+                f"Source campaign: "
+                f"{source_campaign_start} to "
+                f"{source_campaign_end}"
+            )
+    
+            update_log_row(
+                ws,
+                row_idx,
+                {
+                    "source_modified": source_modified,
+                    "status": "checked_weekly_source_mismatch",
+                    "updated_at": timestamp,
+                },
+            )
+    
+            return
+    
+        # -----------------------------------------------------
+        # 2. Lấy ngày hiện tại để cập nhật Last Verified
+        # -----------------------------------------------------
+        today_date = now_local(
+            cfg["timezone"]
+        ).date()
+    
+        today_str = today_date.isoformat()
+    
+        # -----------------------------------------------------
+        # 3. Đọc dữ liệu hiện tại trong Google Sheet
+        # -----------------------------------------------------
+        sheet_check_answer = str(
+            row.get("check_answer")
+            or ""
+        ).strip()
+    
+        sheet_source_modified = str(
+            row.get("source_modified")
+            or ""
+        ).strip()
+    
+        sheet_verified_date = str(
+            row.get("verified_date")
+            or ""
+        ).strip()
+    
+        # -----------------------------------------------------
+        # 4. Kiểm tra lý do cần update
+        # -----------------------------------------------------
+    
+        # Theme, reward hoặc answer groups có thay đổi.
+        signature_changed = (
+            current_check_value
+            != sheet_check_answer
+        )
+    
+        # MiningCombo modified lại page.
+        source_modified_changed = (
+            str(source_modified).strip()
+            != sheet_source_modified
+        )
+    
+        # Hôm nay bài chưa được cập nhật Last Verified.
+        not_verified_today = (
+            sheet_verified_date
+            != today_str
+        )
+    
+        print(
+            f"Weekly signature changed: "
+            f"{signature_changed}"
+        )
+    
+        print(
+            f"Weekly source_modified changed: "
+            f"{source_modified_changed}"
+        )
+    
+        print(
+            f"Weekly verified today: "
+            f"{not not_verified_today}"
+        )
+    
+        # -----------------------------------------------------
+        # 5. Nếu hôm nay đã verify và source không đổi thì skip
+        # -----------------------------------------------------
+        if (
+            not signature_changed
+            and not source_modified_changed
+            and not not_verified_today
+        ):
+            print(
+                "Weekly post already verified today "
+                "and source has not changed. Skip."
+            )
+    
+            update_log_row(
+                ws,
+                row_idx,
+                {
+                    "status": "checked_weekly_no_change",
+                    "updated_at": timestamp,
+                },
+            )
+    
+            return
+    
+        # -----------------------------------------------------
+        # 6. Lấy nội dung bài WordPress hiện tại
+        # -----------------------------------------------------
+        print(
+            "Weekly data requires an update. "
+            "Fetching existing WordPress post."
+        )
+    
+        existing_post = get_wp_post(
+            cfg,
+            post_id,
+        )
+    
+        existing_content = (
+            existing_post.get(
+                "content",
+                {},
+            ).get("raw")
+            or existing_post.get(
+                "content",
+                {},
+            ).get("rendered", "")
+        )
+    
+        if not existing_content:
+            raise RuntimeError(
+                f"Empty WordPress content for post {post_id}"
+            )
+    
+        # -----------------------------------------------------
+        # 7. Tạo lại toàn bộ ANSWER_AREA
+        # -----------------------------------------------------
+        updated_content = update_existing_answer_content(
+            content_html=existing_content,
+            game_cfg=game_cfg,
+            answer_data=answer_data,
+            readable_date=readable_date,
+            last_verified_date=today_date,
+        )
+    
+        # -----------------------------------------------------
+        # 8. Chạy lại auto-link
+        # -----------------------------------------------------
+        updated_content = auto_link_html(
+            updated_content,
+            cfg,
+        )
+    
+        # -----------------------------------------------------
+        # 9. Gửi nội dung mới lên WordPress
+        # -----------------------------------------------------
+        update_wp_post(
+            cfg,
+            post_id,
+            updated_content,
+        )
+    
+        # -----------------------------------------------------
+        # 10. Update Google Sheet
+        # -----------------------------------------------------
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "question": answer_data.get(
+                    "question",
+                    "",
+                ),
+                "answer": answer_data.get(
+                    "answer",
+                    "",
+                ),
+                "check_answer": current_check_value,
+                "verified_date": today_str,
+                "status": "updated_weekly_wotd",
+                "updated_at": timestamp,
+            },
+        )
+    
+        print(
+            f"Updated weekly WordPress post {post_id}"
+        )
+    
+        print(
+            f"Weekly campaign: "
+            f"{campaign_start} to {campaign_end}"
+        )
+    
+        print(
+            f"Last Verified: "
+            f"{format_date_readable(today_date)}"
+        )
+    
+        print("Status: updated_weekly_wotd")
+    
+        return
+    
+    # =========================================================
+    # DAILY GAME UPDATE
+    # =========================================================
+    sheet_check_answer = row.get("check_answer") or ""
     
     answer_changed = should_update_answer(
         current_check_value,
