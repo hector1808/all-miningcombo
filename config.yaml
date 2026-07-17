@@ -127,6 +127,25 @@ games:
     slug_format: "hamster-kombat-daily-combo-{{CURRENT_DATE_SLUG}}"
     seo_title_format: "Hamster Kombat Daily Combo ({{CURRENT_DATE_READABLE}}): Today’s Cipher Code"
     meta_description_format: "Find today's Hamster Kombat Daily Combo for {{CURRENT_DATE_READABLE}}, including the latest Daily Cipher code. Get the exact Hold/Tap pattern for the GameDev puzzle and claim your $HMSTR reward."
+
+  - game_key: "binance_wotd"
+    answer_type: "binance_wotd"
+    post_cycle: "weekly"
+    enabled: true
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/PUT_PAGE_ID_HERE"
+    template_file: "games/binance-wotd.txt"
+    featured_media_id: 25514
+  
+    publish_time: "22:00"
+  
+    answer_placeholder: "{{ANSWER_AREA}}"
+    answer_area_id: "answer-area"
+  
+    title_format: "Binance Word of the Day Answers Today - {{CAMPAIGN_DATE_READABLE}}"
+    slug_format: "binance-word-of-the-day-answer-{{CAMPAIGN_DATE_SLUG}}"
+    seo_title_format: "Binance Word of the Day Answers Today {{CAMPAIGN_DATE_READABLE}}"
+    meta_description_format: "Get Binance Word of the Day answers today for every letter length (3–8 letters). Updated daily so you never miss the BNB prize pool."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
