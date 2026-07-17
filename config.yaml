@@ -133,9 +133,9 @@ games:
     post_cycle: "weekly"
     enabled: true
   
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/PUT_PAGE_ID_HERE"
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/25514"
     template_file: "games/binance-wotd.txt"
-    featured_media_id: 25514
+    featured_media_id: 338326
   
     publish_time: "22:00"
   
