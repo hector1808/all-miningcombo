@@ -82,30 +82,6 @@ def get_target_date(tz_name):
 
     raise RuntimeError(f"Invalid RUN_MODE: {run_mode}")
 
-
-# def target_date_str(tz_name):
-#     return (now_local(tz_name).date() + timedelta(days=1)).isoformat()
-
-
-# def target_date_readable(tz_name):
-#     d = now_local(tz_name).date() + timedelta(days=1)
-#     return f"{d.strftime('%B')} {d.day}, {d.year}"
-
-# def scheduled_publish_datetime(tz_name):
-#     target_date = get_target_date(tz_name)
-
-#     publish_dt = datetime(
-#         target_date.year,
-#         target_date.month,
-#         target_date.day,
-#         2,
-#         0,
-#         0,
-#         tzinfo=ZoneInfo(tz_name),
-#     )
-
-#     return publish_dt.isoformat()
-
 def scheduled_publish_datetime(
     tz_name,
     game_cfg,
@@ -414,40 +390,6 @@ def fetch_source_page(url):
     )
     r.raise_for_status()
     return r.json()
-
-
-# def extract_question_answer(content_html, game_cfg, cfg):
-#     question_selector = game_cfg.get("question_selector") or cfg["defaults"]["question_selector"]
-#     answer_selector = game_cfg.get("answer_selector") or cfg["defaults"]["answer_selector"]
-
-#     soup = BeautifulSoup(content_html, "html.parser")
-
-#     question = ""
-#     answer = ""
-
-#     for p in soup.select(question_selector):
-#         text = p.get_text(" ", strip=True)
-#         if text.lower().startswith("question:"):
-#             question = re.sub(r"^question:\s*", "", text, flags=re.I).strip()
-#             break
-
-#     for p in soup.select(answer_selector):
-#         text = p.get_text(" ", strip=True)
-#         if text.lower().startswith("answer:"):
-#             answer = re.sub(r"^answer:\s*", "", text, flags=re.I).strip()
-#             break
-
-#     return question, answer
-
-
-# def strip_prefix(text, prefix):
-#     text = text.strip()
-#     prefix = prefix.strip()
-
-#     if text.lower().startswith(prefix.lower()):
-#         return text[len(prefix):].strip()
-
-#     return ""
 
 def strip_prefix(text, prefix):
     text = text.strip()
@@ -814,30 +756,6 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
     raise RuntimeError(
         f"Unsupported answer_type: {answer_type}"
     )
-
-
-# def make_waiting_answer_data(game_cfg):
-#     answer_type = game_cfg.get(
-#         "answer_type",
-#         "question_answer",
-#     )
-
-#     if answer_type == "hamster_cipher":
-#         return {
-#             "answer_type": "hamster_cipher",
-#             "question": "Updating soon.",
-#             "answer": "Updating soon.",
-#             "check_value": "",
-#             "word": "Updating soon.",
-#             "simplified_lines": [],
-#         }
-
-#     return {
-#         "answer_type": "question_answer",
-#         "question": "Updating soon.",
-#         "answer": "Updating soon.",
-#         "check_value": "",
-#     }
 
 def make_waiting_answer_data(
     game_cfg,
@@ -1303,41 +1221,6 @@ def replace_answer_area(
 
     return str(soup)
 
-
-# def update_existing_answer_content(
-#     content_html,
-#     game_cfg,
-#     answer_data,
-#     readable_date,
-# ):
-#     answer_type = answer_data.get(
-#         "answer_type",
-#         "question_answer",
-#     )
-
-#     if answer_type == "hamster_cipher":
-#         answer_area_html = build_hamster_cipher_answer_area(
-#             readable_date=readable_date,
-#             word=answer_data.get("word"),
-#             simplified_lines=answer_data.get(
-#                 "simplified_lines",
-#                 [],
-#             ),
-#         )
-
-#         return replace_answer_area(
-#             content_html=content_html,
-#             game_cfg=game_cfg,
-#             answer_area_html=answer_area_html,
-#         )
-
-#     return update_quiz_answer_block(
-#         content_html=content_html,
-#         game_cfg=game_cfg,
-#         question=answer_data.get("question"),
-#         answer=answer_data.get("answer"),
-#     )
-
 def update_existing_answer_content(
     content_html,
     game_cfg,
@@ -1384,25 +1267,6 @@ def update_existing_answer_content(
         question=answer_data.get("question"),
         answer=answer_data.get("answer"),
     )
-
-
-# def build_content(game_cfg, cfg, date_str, question, answer, crypto_snapshot_html):
-#     readable_date = target_date_readable(cfg["timezone"])
-
-#     with open(game_cfg["template_file"], "r", encoding="utf-8") as f:
-#         template = f.read()
-
-#     content = replace_date_vars(template, date_str, readable_date)
-#     content = content.replace("{{CRYPTO_SNAPSHOT}}", crypto_snapshot_html)
-
-#     content = update_quiz_answer_block(
-#         content_html=content,
-#         game_cfg=game_cfg,
-#         question=question,
-#         answer=answer,
-#     )
-
-#     return auto_link_html(content, cfg)
 
 def build_content(
     game_cfg,
@@ -1580,38 +1444,6 @@ def build_content(
         content,
         cfg,
     )
-
-
-# def create_wp_post(cfg, game_cfg, title, slug, content):
-#     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
-
-#     featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
-
-#     payload = {
-#         "title": title,
-#         "slug": slug,
-#         "lang": cfg["wp"]["language"],
-#         "content": content,
-#         "status": cfg["wp"]["status"],
-#         "author": cfg["wp"]["author_id"],
-#         "categories": cfg["wp"]["category_ids"],
-#     }
-
-#     if featured_media_id:
-#         payload["featured_media"] = int(featured_media_id)
-
-#     r = requests.post(
-#         url,
-#         headers={**wp_headers(cfg), "Content-Type": "application/json"},
-#         json=payload,
-#         timeout=120,
-#     )
-
-#     if r.status_code >= 400:
-#         raise RuntimeError(f"Post create failed {r.status_code}: {r.text[:2000]}")
-
-#     return r.json()
-
 
 def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
