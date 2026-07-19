@@ -614,7 +614,6 @@ def find_label_element(soup, selector, prefix):
 
     return None
 
-
 def extract_hamster_cipher(content_html, game_cfg):
     soup = BeautifulSoup(content_html, "html.parser")
 
@@ -636,43 +635,75 @@ def extract_hamster_cipher(content_html, game_cfg):
         "Simplified",
     )
 
-    # Lấy Word: DUST
-    word = extract_by_selector_and_prefix(
-        soup=soup,
-        selector=word_selector,
-        prefix=word_prefix,
-    )
+    word = ""
+    morse_lines = []
+    simplified_lines = []
 
-    # Tìm paragraph chỉ chứa "Simplified:"
+    # =====================================================
+    # 1. Tìm paragraph Word và lấy Morse ngay phía sau
+    # =====================================================
+    word_element = None
+
+    for el in soup.select(word_selector):
+        text = el.get_text(" ", strip=True)
+        value = strip_prefix(text, word_prefix)
+
+        if value:
+            word = value
+            word_element = el
+            break
+
+    if word_element:
+        # Morse thường là paragraph kế tiếp trong cùng column.
+        morse_element = word_element.find_next_sibling("p")
+
+        if not morse_element:
+            morse_element = word_element.find_next("p")
+
+        if morse_element:
+            raw_morse = morse_element.get_text(
+                "\n",
+                strip=True,
+            )
+
+            morse_lines = [
+                line.strip()
+                for line in raw_morse.splitlines()
+                if line.strip()
+            ]
+
+    # =====================================================
+    # 2. Tìm label Simplified và paragraph kế tiếp
+    # =====================================================
     simplified_label = find_label_element(
         soup=soup,
         selector=simplified_label_selector,
         prefix=simplified_prefix,
     )
 
-    simplified_lines = []
-
     if simplified_label:
-        # Paragraph chứa Hold/Tap thường nằm ngay sau label.
-        simplified_content = simplified_label.find_next_sibling("p")
+        simplified_element = (
+            simplified_label.find_next_sibling("p")
+        )
 
-        # Fallback nếu HTML source có thêm wrapper hoặc block khác.
-        if not simplified_content:
-            simplified_content = simplified_label.find_next("p")
+        if not simplified_element:
+            simplified_element = (
+                simplified_label.find_next("p")
+            )
 
-        if simplified_content:
-            raw_lines = simplified_content.get_text(
+        if simplified_element:
+            raw_simplified = simplified_element.get_text(
                 "\n",
                 strip=True,
             )
 
             simplified_lines = [
                 line.strip()
-                for line in raw_lines.splitlines()
+                for line in raw_simplified.splitlines()
                 if line.strip()
             ]
 
-    return word, simplified_lines
+    return word, morse_lines, simplified_lines
 
 def extract_game_answer_data(content_html, game_cfg, cfg):
     answer_type = game_cfg.get(
@@ -681,23 +712,52 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
     )
 
     if answer_type == "hamster_cipher":
-        word, simplified_lines = extract_hamster_cipher(
-            content_html=content_html,
-            game_cfg=game_cfg,
+        word, morse_lines, simplified_lines = (
+            extract_hamster_cipher(
+                content_html=content_html,
+                game_cfg=game_cfg,
+            )
         )
-
+    
+        answer_payload = {
+            "word": word,
+            "morse_lines": morse_lines,
+            "simplified_lines": simplified_lines,
+        }
+    
+        # Signature giúp phát hiện thay đổi không chỉ ở Word,
+        # mà cả Morse và Hold/Tap.
+        check_value = json.dumps(
+            answer_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    
+        answer_text_parts = []
+    
+        if morse_lines:
+            answer_text_parts.append(
+                "Morse:\n" + "\n".join(morse_lines)
+            )
+    
+        if simplified_lines:
+            answer_text_parts.append(
+                "Simplified:\n"
+                + "\n".join(simplified_lines)
+            )
+    
         return {
             "answer_type": "hamster_cipher",
-
-            # Giữ tương thích với các cột Sheet hiện tại.
+    
+            # Dùng các cột Sheet hiện tại.
             "question": word,
-            "answer": "\n".join(simplified_lines),
-
-            # Hamster dùng word để phát hiện đáp án mới.
-            "check_value": word,
-
+            "answer": "\n\n".join(answer_text_parts),
+            "check_value": check_value,
+    
             # Dữ liệu riêng để render HTML.
             "word": word,
+            "morse_lines": morse_lines,
             "simplified_lines": simplified_lines,
         }
 
@@ -796,6 +856,7 @@ def make_waiting_answer_data(
             "answer": "Updating soon.",
             "check_value": "",
             "word": "Updating soon.",
+            "morse_lines": [],
             "simplified_lines": [],
         }
 
@@ -1005,6 +1066,7 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
 def build_hamster_cipher_answer_area(
     readable_date,
     word,
+    morse_lines,
     simplified_lines,
 ):
     safe_date = html.escape(
@@ -1015,23 +1077,65 @@ def build_hamster_cipher_answer_area(
         str(word or "Updating soon.")
     )
 
+    html_parts = []
+
+    html_parts.append(
+        "<p>"
+        f"<strong>Date:</strong> {safe_date}"
+        " &nbsp; "
+        f"<strong>Word:</strong> {safe_word}"
+        "</p>"
+    )
+
+    # =====================================================
+    # Morse gốc
+    # =====================================================
+    if morse_lines:
+        morse_html = "<br>\n".join(
+            html.escape(str(line))
+            for line in morse_lines
+            if str(line).strip()
+        )
+
+        html_parts.append(
+            "<p>"
+            "Each letter in today’s cipher is represented "
+            "by the following dot-and-dash sequence:"
+            "</p>"
+        )
+
+        html_parts.append(
+            f"<p>{morse_html}</p>"
+        )
+
+    # =====================================================
+    # Hold/Tap simplified, chỉ hiển thị nếu source có dữ liệu
+    # =====================================================
     if simplified_lines:
-        sequence_html = "<br>\n".join(
+        simplified_html = "<br>\n".join(
             html.escape(str(line))
             for line in simplified_lines
             if str(line).strip()
         )
-    else:
-        sequence_html = "Updating soon."
 
-    return (
-        f'<p><strong>Date:</strong> {safe_date}'
-        f' &nbsp; <strong>Word:</strong> {safe_word}</p>\n'
-        '<p>The GameDev mini-game hides its reward behind a short cipher. '
-        'Instead of typing the word directly, each letter is entered on '
-        'the keypad as a Hold/Tap pattern:</p>\n'
-        f'<p>{sequence_html}</p>'
-    )
+        html_parts.append(
+            "<p>"
+            "Use the following Hold/Tap pattern to enter "
+            "the cipher in the GameDev mini-game:"
+            "</p>"
+        )
+
+        html_parts.append(
+            f"<p>{simplified_html}</p>"
+        )
+
+    # Chỉ hiện Updating soon nếu cả Morse và Simplified đều trống.
+    if not morse_lines and not simplified_lines:
+        html_parts.append(
+            "<p>Updating soon.</p>"
+        )
+
+    return "\n".join(html_parts)
 
 def build_binance_wotd_answer_area(
     answer_data,
@@ -1246,13 +1350,19 @@ def update_existing_answer_content(
         )
 
     if answer_type == "hamster_cipher":
-        answer_area_html = build_hamster_cipher_answer_area(
-            readable_date=readable_date,
-            word=answer_data.get("word"),
-            simplified_lines=answer_data.get(
-                "simplified_lines",
-                [],
-            ),
+        answer_area_html = (
+            build_hamster_cipher_answer_area(
+                readable_date=readable_date,
+                word=answer_data.get("word"),
+                morse_lines=answer_data.get(
+                    "morse_lines",
+                    [],
+                ),
+                simplified_lines=answer_data.get(
+                    "simplified_lines",
+                    [],
+                ),
+            )
         )
 
         return replace_answer_area(
@@ -1400,8 +1510,10 @@ def build_content(
         answer_area_html = (
             build_hamster_cipher_answer_area(
                 readable_date=readable_date,
-                word=answer_data.get(
-                    "word"
+                word=answer_data.get("word"),
+                morse_lines=answer_data.get(
+                    "morse_lines",
+                    [],
                 ),
                 simplified_lines=answer_data.get(
                     "simplified_lines",
