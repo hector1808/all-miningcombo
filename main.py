@@ -705,11 +705,155 @@ def extract_hamster_cipher(content_html, game_cfg):
 
     return word, morse_lines, simplified_lines
 
+def extract_quote_author(content_html):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    source_date = None
+    quote = ""
+    author = ""
+    question_element = None
+
+    # =====================================================
+    # 1. Lấy Date và tìm paragraph câu hỏi
+    # =====================================================
+    for p in soup.select("p.wp-block-paragraph"):
+        text = html.unescape(
+            p.get_text(" ", strip=True)
+        )
+
+        if source_date is None:
+            date_match = re.search(
+                r"\bDate\s*:\s*"
+                r"([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+                text,
+                flags=re.I,
+            )
+
+            if date_match:
+                try:
+                    source_date = datetime.strptime(
+                        date_match.group(1),
+                        "%B %d, %Y",
+                    ).date()
+                except ValueError:
+                    source_date = None
+
+        if re.search(
+            r"who\s+is\s+the\s+author\s+"
+            r"of\s+the\s+quote",
+            text,
+            flags=re.I,
+        ):
+            question_element = p
+
+    # =====================================================
+    # 2. Quote nằm ngay trước paragraph câu hỏi
+    # =====================================================
+    if question_element:
+        quote_element = (
+            question_element.find_previous_sibling("p")
+        )
+
+        if quote_element:
+            quote = html.unescape(
+                quote_element.get_text(
+                    " ",
+                    strip=True,
+                )
+            )
+
+    # =====================================================
+    # 3. Ưu tiên lấy author từ span.copy-text
+    # =====================================================
+    author_element = soup.select_one(
+        "span.copy-text"
+    )
+
+    if author_element:
+        author = html.unescape(
+            author_element.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+    # Fallback nếu source bỏ span.copy-text.
+    if not author:
+        for p in soup.select("p.wp-block-paragraph"):
+            text = html.unescape(
+                p.get_text(" ", strip=True)
+            )
+
+            value = strip_prefix(
+                text,
+                "Answer",
+            )
+
+            if value:
+                author = value
+                break
+
+    return source_date, quote, author
+
 def extract_game_answer_data(content_html, game_cfg, cfg):
     answer_type = game_cfg.get(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "quote_author":
+        source_date, quote, author = (
+            extract_quote_author(
+                content_html
+            )
+        )
+
+        is_complete = bool(
+            source_date
+            and quote
+            and author
+        )
+
+        answer_payload = {
+            "source_date": (
+                source_date.isoformat()
+                if source_date
+                else ""
+            ),
+            "quote": quote,
+            "author": author,
+        }
+
+        # Chỉ tạo check_value khi dữ liệu đầy đủ.
+        # Tránh update post khi source mới chỉ có Date
+        # nhưng chưa có quote hoặc author.
+        if is_complete:
+            check_value = json.dumps(
+                answer_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        else:
+            check_value = ""
+
+        return {
+            "answer_type": "quote_author",
+
+            # Dữ liệu chung cho Google Sheet.
+            "question": quote,
+            "answer": author,
+            "check_value": check_value,
+
+            # Dữ liệu riêng của Hrum.
+            "source_date": source_date,
+            "quote": quote,
+            "author": author,
+            "is_complete": is_complete,
+        }
 
     if answer_type == "hamster_cipher":
         word, morse_lines, simplified_lines = (
@@ -826,6 +970,18 @@ def make_waiting_answer_data(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "quote_author":
+        return {
+            "answer_type": "quote_author",
+            "question": "Updating soon.",
+            "answer": "Updating soon.",
+            "check_value": "",
+            "source_date": None,
+            "quote": "Updating soon.",
+            "author": "Updating soon.",
+            "is_complete": False,
+        }
 
     if answer_type == "binance_wotd":
         empty_groups = {
@@ -1062,6 +1218,37 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
     target_p.append(answer or "Updating soon.")
 
     return str(soup)
+
+def build_quote_author_answer_area(
+    readable_date,
+    quote,
+    author,
+):
+    safe_date = html.escape(
+        str(readable_date or "")
+    )
+
+    safe_quote = html.escape(
+        str(quote or "Updating soon.")
+    )
+
+    safe_author = html.escape(
+        str(author or "Updating soon.")
+    )
+
+    return (
+        f"<p><strong>Date:</strong> "
+        f"{safe_date}</p>\n"
+
+        f"<p>{safe_quote}</p>\n"
+
+        "<p>"
+        "Who is the author of the quote?"
+        "</p>\n"
+
+        "<p><strong>Answer:</strong> "
+        f"{safe_author}</p>"
+    )
 
 def build_hamster_cipher_answer_area(
     readable_date,
@@ -1337,6 +1524,21 @@ def update_existing_answer_content(
         "question_answer",
     )
 
+    if answer_type == "quote_author":
+        answer_area_html = (
+            build_quote_author_answer_area(
+                readable_date=readable_date,
+                quote=answer_data.get("quote"),
+                author=answer_data.get("author"),
+            )
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
+
     if answer_type == "binance_wotd":
         answer_area_html = build_binance_wotd_answer_area(
             answer_data=answer_data,
@@ -1529,6 +1731,40 @@ def build_content(
         )
 
     # =====================================================
+    # HRUM QUOTE OF THE DAY
+    # =====================================================
+    elif answer_type == "quote_author":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"Hrum template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
+            )
+
+        answer_area_html = (
+            build_quote_author_answer_area(
+                readable_date=readable_date,
+                quote=answer_data.get("quote"),
+                author=answer_data.get("author"),
+            )
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    # =====================================================
     # GAME QUESTION / ANSWER THÔNG THƯỜNG
     # =====================================================
     elif answer_type == "question_answer":
@@ -1694,6 +1930,10 @@ def process_game(cfg, ws, game_cfg):
         return
 
     game_key = game_cfg["game_key"]
+    run_mode = os.getenv(
+        "RUN_MODE",
+        "update",
+    ).lower()
     # date_str = target_date_str(cfg["timezone"])
     # readable_date = target_date_readable(cfg["timezone"])
     # slug_date = target_date_slug(cfg["timezone"])
@@ -1821,6 +2061,104 @@ def process_game(cfg, ws, game_cfg):
         "",
     )
 
+    # =====================================================
+    # HRUM: UPDATE THEO DATE TRONG SOURCE
+    # =====================================================
+    if (
+        answer_data.get("answer_type")
+        == "quote_author"
+    ):
+        hrum_source_date = answer_data.get(
+            "source_date"
+        )
+
+        hrum_is_complete = answer_data.get(
+            "is_complete",
+            False,
+        )
+
+        # Trong create mode vẫn giữ target ngày mai.
+        # Chỉ update mode mới dùng Date trong source.
+        if run_mode == "update":
+            if not hrum_source_date:
+                print(
+                    "Hrum source date not found. Skip."
+                )
+                return
+
+            if not hrum_is_complete:
+                print(
+                    "Hrum source is incomplete. "
+                    "Quote or author is missing. Skip."
+                )
+                return
+
+            today_date = now_local(
+                cfg["timezone"]
+            ).date()
+
+            yesterday_date = (
+                today_date
+                - timedelta(days=1)
+            )
+
+            # Chỉ chấp nhận source của hôm nay
+            # hoặc hôm qua. Tránh source quá cũ
+            # update nhầm một post cũ.
+            if hrum_source_date not in {
+                today_date,
+                yesterday_date,
+            }:
+                print(
+                    "Hrum source date is too old "
+                    "or invalid. Skip."
+                )
+                print(
+                    f"Hrum source date: "
+                    f"{hrum_source_date}"
+                )
+                print(
+                    f"Allowed dates: "
+                    f"{yesterday_date}, "
+                    f"{today_date}"
+                )
+                return
+
+            # Dùng Date trong HTML để tìm đúng row.
+            target_date_obj = hrum_source_date
+            date_str = target_date_obj.isoformat()
+
+            readable_date = format_date_readable(
+                target_date_obj
+            )
+
+            slug_date = format_date_slug(
+                target_date_obj
+            )
+
+            print(
+                "Hrum update target overridden "
+                "by source Date."
+            )
+
+            print(
+                f"Hrum source target: "
+                f"{date_str}"
+            )
+
+        # Create:
+        # source date phải bằng target ngày mai
+        # thì mới dùng đáp án ngay.
+        #
+        # Update:
+        # target đã được đổi thành source date.
+        source_is_today_target = bool(
+            hrum_source_date
+            and hrum_is_complete
+            and hrum_source_date
+            == target_date_obj
+        )
+
     source_matches_target_week = False
 
     if post_cycle == "weekly":
@@ -1844,7 +2182,7 @@ def process_game(cfg, ws, game_cfg):
 
     row_idx, row = find_log_row(ws, date_str, game_key)
 
-    run_mode = os.getenv("RUN_MODE", "update").lower()
+    # run_mode = os.getenv("RUN_MODE", "update").lower()
 
     if run_mode == "create" and row:
         print("Create mode: log already exists, skip.")
