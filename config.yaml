@@ -170,6 +170,30 @@ games:
     seo_title_format: "Hrum Quote of the Day Answer ({{CURRENT_DATE_READABLE}}) – Today's Author Name"
   
     meta_description_format: "Hrum Quote of the Day answer, updated daily. Get today's quote author name, claim +150 $HRUM in Hrum Bot, and see what's moving in crypto today."
+
+  
+  - game_key: "binance_red_packet"
+    enabled: true
+  
+    answer_type: "red_packet_codes"
+    post_cycle: "daily"
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/26104"
+    template_file: "games/binance-red-packet.txt"
+    featured_media_id: 338385
+  
+    publish_time: "22:00"
+  
+    answer_placeholder: "{{ANSWER_AREA}}"
+    answer_area_id: "answer-area"
+  
+    title_format: "Binance Red Packet Code Today for {{CURRENT_DATE_READABLE}}: Earn Free BNB Now"
+  
+    slug_format: "binance-red-packet-code-today-for-{{CURRENT_DATE_SLUG}}-claim-free-bnb"
+  
+    seo_title_format: "Binance Red Packet Code Today for {{CURRENT_DATE_READABLE}}: Claim Free BNB Now"
+  
+    meta_description_format: "Get the Binance Red Packet code today, updated hourly. Claim free USDT, BTC, ETH, SOL, or BNB in seconds using a valid, unused code."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
