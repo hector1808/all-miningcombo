@@ -798,11 +798,123 @@ def extract_quote_author(content_html):
 
     return source_date, quote, author
 
+def extract_red_packet_codes(content_html):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    # Chấp nhận cả:
+    # #12 Code Is:
+    # #02 No Code Is:
+    code_pattern = re.compile(
+        r"^\s*#\s*(\d+)\s+"
+        r"(?:No\s+)?"
+        r"Code\s+Is\s*:?",
+        flags=re.I,
+    )
+
+    codes_by_number = {}
+
+    for p in soup.select(
+        "p.wp-block-paragraph"
+    ):
+        paragraph_text = html.unescape(
+            p.get_text(" ", strip=True)
+        )
+
+        match = code_pattern.search(
+            paragraph_text
+        )
+
+        if not match:
+            continue
+
+        number = int(
+            match.group(1)
+        )
+
+        code_element = p.select_one(
+            "span.copy-text"
+        )
+
+        if not code_element:
+            continue
+
+        # Ưu tiên giá trị dùng cho chức năng copy.
+        code = (
+            code_element.get(
+                "data-original-text"
+            )
+            or code_element.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        code = html.unescape(
+            str(code)
+        ).strip()
+
+        if not code:
+            continue
+
+        # Nếu source vô tình có cùng một số nhiều lần,
+        # giá trị xuất hiện sau cùng sẽ được sử dụng.
+        codes_by_number[number] = code
+
+    # Luôn chuẩn hóa thứ tự:
+    # code có số lớn nhất nằm trên cùng.
+    return [
+        {
+            "number": number,
+            "code": codes_by_number[number],
+        }
+        for number in sorted(
+            codes_by_number,
+            reverse=True,
+        )
+    ]
+
 def extract_game_answer_data(content_html, game_cfg, cfg):
     answer_type = game_cfg.get(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "red_packet_codes":
+        codes = extract_red_packet_codes(
+            content_html
+        )
+
+        # JSON được chuẩn hóa để lưu Sheet
+        # và tạo hash ổn định.
+        answer_json = json.dumps(
+            codes,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        # Không tạo hash nếu source chưa có code.
+        if codes:
+            check_value = hashlib.sha256(
+                answer_json.encode("utf-8")
+            ).hexdigest()
+        else:
+            check_value = ""
+
+        return {
+            "answer_type": "red_packet_codes",
+
+            # Dữ liệu chung dùng cho Google Sheet.
+            "question": "",
+            "answer": answer_json if codes else "",
+            "check_value": check_value,
+
+            # Dữ liệu dùng để render HTML.
+            "codes": codes,
+        }
 
     if answer_type == "quote_author":
         source_date, quote, author = (
@@ -970,6 +1082,15 @@ def make_waiting_answer_data(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "red_packet_codes":
+        return {
+            "answer_type": "red_packet_codes",
+            "question": "",
+            "answer": "Updating soon.",
+            "check_value": "",
+            "codes": [],
+        }
 
     if answer_type == "quote_author":
         return {
@@ -1250,6 +1371,43 @@ def build_quote_author_answer_area(
         f"{safe_author}</p>"
     )
 
+def build_red_packet_answer_area(codes):
+    if not codes:
+        return "<p>Updating soon.</p>"
+
+    html_parts = []
+
+    for item in codes:
+        number = int(
+            item["number"]
+        )
+
+        code = str(
+            item["code"]
+        ).strip()
+
+        safe_code_text = html.escape(
+            code
+        )
+
+        safe_code_attr = html.escape(
+            code,
+            quote=True,
+        )
+
+        html_parts.append(
+            f"<p>#{number:02d} Code Is: "
+            f'<span class="copy-text" '
+            f'data-original-text="{safe_code_attr}">'
+            f"{safe_code_text}"
+            "</span>"
+            "</p>"
+        )
+
+    return "\n".join(
+        html_parts
+    )
+
 def build_hamster_cipher_answer_area(
     readable_date,
     word,
@@ -1524,6 +1682,22 @@ def update_existing_answer_content(
         "question_answer",
     )
 
+    if answer_type == "red_packet_codes":
+        answer_area_html = (
+            build_red_packet_answer_area(
+                codes=answer_data.get(
+                    "codes",
+                    [],
+                ),
+            )
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
+
     if answer_type == "quote_author":
         answer_area_html = (
             build_quote_author_answer_area(
@@ -1597,6 +1771,7 @@ def build_content(
     - question_answer
     - hamster_cipher
     - binance_wotd
+    - red_packet_codes
     """
 
     # -----------------------------------------------------
@@ -1679,6 +1854,41 @@ def build_content(
                 answer_data=answer_data,
                 last_verified_date=answer_data.get(
                     "last_verified_date"
+                ),
+            )
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    # =====================================================
+    # BINANCE RED PACKET CODES
+    # =====================================================
+    elif answer_type == "red_packet_codes":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"Red Packet template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
+            )
+
+        answer_area_html = (
+            build_red_packet_answer_area(
+                codes=answer_data.get(
+                    "codes",
+                    [],
                 ),
             )
         )
@@ -2190,6 +2400,34 @@ def process_game(cfg, ws, game_cfg):
     
     if run_mode == "update" and not row:
         print("Update mode: today's post log not found, skip.")
+        return
+
+    # Red Packet:
+    # Không update nếu source chưa lấy được code nào.
+    # Chỉ áp dụng riêng cho game này.
+    if (
+        run_mode == "update"
+        and answer_data.get("answer_type")
+        == "red_packet_codes"
+        and not answer_data.get("codes")
+    ):
+        print(
+            "No Red Packet codes found "
+            "in source. Skip update."
+        )
+
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": (
+                    "checked_no_red_packet_codes"
+                ),
+                "updated_at": timestamp,
+            },
+        )
+
         return
 
     if not row:
