@@ -135,6 +135,27 @@ def target_date_slug(tz_name):
 
     return f"{d.day}-{d.strftime('%B').lower()}-{d.year}"
 
+def format_datetime_readable(datetime_value):
+    offset = datetime_value.strftime("%z")
+
+    if offset:
+        offset = f"{offset[:3]}:{offset[3:]}"
+        timezone_text = f"UTC{offset}"
+    else:
+        timezone_text = ""
+
+    result = (
+        f"{datetime_value.strftime('%B')} "
+        f"{datetime_value.day}, "
+        f"{datetime_value.year} at "
+        f"{datetime_value.strftime('%H:%M')}"
+    )
+
+    if timezone_text:
+        result += f" ({timezone_text})"
+
+    return result
+
 def format_date_readable(date_value):
     return (
         f"{date_value.strftime('%B')} "
@@ -1371,11 +1392,27 @@ def build_quote_author_answer_area(
         f"{safe_author}</p>"
     )
 
-def build_red_packet_answer_area(codes):
-    if not codes:
-        return "<p>Updating soon.</p>"
+def build_red_packet_answer_area(
+    codes,
+    last_updated_text,
+):
+    safe_updated_text = html.escape(
+        str(last_updated_text)
+    )
 
-    html_parts = []
+    html_parts = [
+        (
+            "<p><strong>Last updated:</strong> "
+            f"{safe_updated_text}</p>"
+        )
+    ]
+
+    if not codes:
+        html_parts.append(
+            "<p>Updating soon.</p>"
+        )
+
+        return "\n".join(html_parts)
 
     for item in codes:
         number = int(
@@ -1404,9 +1441,7 @@ def build_red_packet_answer_area(codes):
             "</p>"
         )
 
-    return "\n".join(
-        html_parts
-    )
+    return "\n".join(html_parts)
 
 def build_hamster_cipher_answer_area(
     readable_date,
@@ -1676,6 +1711,7 @@ def update_existing_answer_content(
     answer_data,
     readable_date=None,
     last_verified_date=None,
+    last_updated_text=None,
 ):
     answer_type = answer_data.get(
         "answer_type",
@@ -1688,6 +1724,10 @@ def update_existing_answer_content(
                 codes=answer_data.get(
                     "codes",
                     [],
+                ),
+                last_updated_text=(
+                    last_updated_text
+                    or "Updating soon."
                 ),
             )
         )
@@ -1884,11 +1924,22 @@ def build_content(
                 f"Found: {placeholder_count}"
             )
 
+        last_updated_text = (
+            format_datetime_readable(
+                now_local(
+                    cfg["timezone"]
+                )
+            )
+        )
+
         answer_area_html = (
             build_red_packet_answer_area(
                 codes=answer_data.get(
                     "codes",
                     [],
+                ),
+                last_updated_text=(
+                    last_updated_text
                 ),
             )
         )
@@ -2928,11 +2979,26 @@ def process_game(cfg, ws, game_cfg):
         or existing_post.get("content", {}).get("rendered", "")
     )
 
+    last_updated_text = None
+
+    if (
+        answer_data.get("answer_type")
+        == "red_packet_codes"
+    ):
+        last_updated_text = (
+            format_datetime_readable(
+                now_local(
+                    cfg["timezone"]
+                )
+            )
+        )
+    
     updated_content = update_existing_answer_content(
         content_html=existing_content,
         game_cfg=game_cfg,
         answer_data=answer_data,
         readable_date=readable_date,
+        last_updated_text=last_updated_text,
     )
 
     updated_content = auto_link_html(updated_content, cfg)
