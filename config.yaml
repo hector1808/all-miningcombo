@@ -194,6 +194,29 @@ games:
     seo_title_format: "Binance Red Packet Code Today for {{CURRENT_DATE_READABLE}}: Claim Free BNB Now"
   
     meta_description_format: "Get the Binance Red Packet code today, updated hourly. Claim free USDT, BTC, ETH, SOL, or BNB in seconds using a valid, unused code."
+
+  - game_key: "city_holder"
+    enabled: true
+  
+    answer_type: "city_holder"
+    post_cycle: "daily"
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/7641"
+    template_file: "games/city-holder.txt"
+    featured_media_id: 338431
+  
+    publish_time: "22:00"
+  
+    answer_placeholder: "{{ANSWER_AREA}}"
+    answer_area_id: "answer-area"
+  
+    title_format: "City Holder Daily Combo & Quiz Answers for {{CURRENT_DATE_READABLE}}"
+  
+    slug_format: "city-holder-daily-combo-quiz-answers-today-{{CURRENT_DATE_SLUG}}"
+  
+    seo_title_format: "City Holder Daily Combo & Quiz Answers Today for {{CURRENT_DATE_READABLE}}"
+  
+    meta_description_format: "Get today's City Holder Daily Combo & Quiz answers to claim up to 7.5 million in-game coins. Step-by-step guide, tips, and rewards explained."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
