@@ -30,6 +30,30 @@ def parse_wp_datetime_local(value, tz_name):
 
     return dt
 
+def parse_wp_datetime_gmt(value, tz_name):
+    """
+    WordPress modified_gmt không có timezone suffix,
+    nhưng giá trị này phải được hiểu là UTC.
+    """
+    if not value:
+        return None
+
+    dt = datetime.fromisoformat(
+        value.replace("Z", "+00:00")
+    )
+
+    if dt.tzinfo is None:
+        dt = dt.replace(
+            tzinfo=ZoneInfo("UTC")
+        )
+    else:
+        dt = dt.astimezone(
+            ZoneInfo("UTC")
+        )
+
+    return dt.astimezone(
+        ZoneInfo(tz_name)
+    )
 
 def target_date_start_datetime(tz_name):
     d = get_target_date(tz_name)
@@ -897,11 +921,236 @@ def extract_red_packet_codes(content_html):
         )
     ]
 
+def find_pre_after_heading(
+    soup,
+    heading_match,
+):
+    """
+    Tìm pre nằm sau H2 phù hợp.
+    Không dùng #tw-target-text vì source có nhiều ID trùng nhau.
+    """
+    for h2 in soup.find_all("h2"):
+        heading_text = html.unescape(
+            h2.get_text(" ", strip=True)
+        ).lower()
+
+        if not heading_match(heading_text):
+            continue
+
+        for sibling in h2.next_siblings:
+            tag_name = getattr(
+                sibling,
+                "name",
+                None,
+            )
+
+            if tag_name == "pre":
+                return sibling
+
+            # Không tìm tràn sang section tiếp theo.
+            if tag_name == "h2":
+                break
+
+    return None
+
+
+def extract_pre_lines(pre_element):
+    if not pre_element:
+        return []
+
+    raw_text = html.unescape(
+        pre_element.get_text("\n")
+    )
+
+    lines = []
+
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+
+        if line:
+            lines.append(line)
+
+        # Giữ một dòng trống để phân cách RU và EN.
+        elif lines and lines[-1] != "":
+            lines.append("")
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    return lines
+
+
+def extract_numbered_answers(lines):
+    answers = []
+
+    for line in lines:
+        match = re.match(
+            r"^\s*\d+\.\s*(.+?)\s*$",
+            line,
+        )
+
+        if match:
+            answers.append(
+                match.group(1).strip()
+            )
+
+    return answers
+
+
+def is_waiting_content(lines):
+    text = " ".join(lines).lower()
+
+    waiting_phrases = [
+        "we will update",
+        "please wait",
+        "updating soon",
+        "update all answers",
+    ]
+
+    return any(
+        phrase in text
+        for phrase in waiting_phrases
+    )
+
+
+def extract_city_holder_data(content_html):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    # =====================================================
+    # 1. Combo
+    # =====================================================
+    combo_pre = find_pre_after_heading(
+        soup,
+        lambda text: (
+            "city holder daily combo"
+            in text
+        ),
+    )
+
+    combo_lines = extract_pre_lines(
+        combo_pre
+    )
+
+    if is_waiting_content(combo_lines):
+        combo_lines = []
+
+    # =====================================================
+    # 2. Quiz English
+    # =====================================================
+    quiz_en_pre = find_pre_after_heading(
+        soup,
+        lambda text: (
+            text.strip()
+            == "city holder daily quiz answer"
+        ),
+    )
+
+    quiz_en_lines = extract_pre_lines(
+        quiz_en_pre
+    )
+
+    quiz_en = extract_numbered_answers(
+        quiz_en_lines
+    )
+
+    # =====================================================
+    # 3. Quiz Russia
+    # =====================================================
+    quiz_ru_pre = find_pre_after_heading(
+        soup,
+        lambda text: (
+            "city holder daily quiz answer for russia"
+            in text
+        ),
+    )
+
+    quiz_ru_lines = extract_pre_lines(
+        quiz_ru_pre
+    )
+
+    quiz_ru = extract_numbered_answers(
+        quiz_ru_lines
+    )
+
+    return {
+        "combo_lines": combo_lines,
+        "quiz_en": quiz_en,
+        "quiz_ru": quiz_ru,
+    }
+
 def extract_game_answer_data(content_html, game_cfg, cfg):
     answer_type = game_cfg.get(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "city_holder":
+        city_data = extract_city_holder_data(
+            content_html
+        )
+
+        combo_lines = city_data.get(
+            "combo_lines",
+            [],
+        )
+
+        quiz_en = city_data.get(
+            "quiz_en",
+            [],
+        )
+
+        quiz_ru = city_data.get(
+            "quiz_ru",
+            [],
+        )
+
+        answer_payload = {
+            "combo_lines": combo_lines,
+            "quiz_en": quiz_en,
+            "quiz_ru": quiz_ru,
+        }
+
+        has_data = bool(
+            combo_lines
+            or quiz_en
+            or quiz_ru
+        )
+
+        answer_json = json.dumps(
+            answer_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        if has_data:
+            check_value = hashlib.sha256(
+                answer_json.encode("utf-8")
+            ).hexdigest()
+        else:
+            check_value = ""
+
+        return {
+            "answer_type": "city_holder",
+
+            # Dữ liệu chung cho Google Sheet.
+            "question": "",
+            "answer": (
+                answer_json
+                if has_data
+                else ""
+            ),
+            "check_value": check_value,
+
+            # Dữ liệu render.
+            "combo_lines": combo_lines,
+            "quiz_en": quiz_en,
+            "quiz_ru": quiz_ru,
+            "has_data": has_data,
+        }
 
     if answer_type == "red_packet_codes":
         codes = extract_red_packet_codes(
@@ -1103,6 +1352,18 @@ def make_waiting_answer_data(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "city_holder":
+        return {
+            "answer_type": "city_holder",
+            "question": "",
+            "answer": "Updating soon.",
+            "check_value": "",
+            "combo_lines": [],
+            "quiz_en": [],
+            "quiz_ru": [],
+            "has_data": False,
+        }
 
     if answer_type == "red_packet_codes":
         return {
@@ -1443,6 +1704,129 @@ def build_red_packet_answer_area(
 
     return "\n".join(html_parts)
 
+def build_city_holder_answer_area(
+    readable_date,
+    combo_lines,
+    quiz_en,
+    quiz_ru,
+):
+    safe_date = html.escape(
+        str(readable_date or "")
+    )
+
+    html_parts = []
+
+    # =====================================================
+    # COMBO
+    # =====================================================
+    html_parts.append(
+        "<h2><strong>"
+        "City Holder Daily Combo Today Answers for "
+        f"{safe_date}"
+        "</strong></h2>"
+    )
+
+    html_parts.append(
+        "<p>Today’s Combo:</p>"
+    )
+
+    if combo_lines:
+        combo_text = "\n".join(
+            html.escape(str(line))
+            for line in combo_lines
+        )
+
+        html_parts.append(
+            '<pre class="wp-block-preformatted">'
+            f"{combo_text}"
+            "</pre>"
+        )
+    else:
+        html_parts.append(
+            "<p>Updating soon.</p>"
+        )
+
+    html_parts.append(
+        "<p>"
+        "Open the combo section inside the official "
+        "City Holder Telegram mini app and upgrade "
+        "these buildings in the order shown. "
+        "The exact category mix (residential, commercial, "
+        "or industrial) changes day to day — don't assume "
+        "it's always split evenly across zones, just match "
+        "today's list above."
+        "</p>"
+    )
+
+    html_parts.append(
+        "<p><em>"
+        "Reward: up to 5 million in-game coins "
+        "for a correct combo."
+        "</em></p>"
+    )
+
+    # =====================================================
+    # QUIZ ENGLISH
+    # =====================================================
+    html_parts.append(
+        "<h2><strong>"
+        "City Holder Daily Quiz Answer - "
+        f"{safe_date}"
+        "</strong></h2>"
+    )
+
+    if quiz_en:
+        quiz_en_items = [
+            f"<li>{html.escape(str(answer))}</li>"
+            for answer in quiz_en
+        ]
+
+        html_parts.append(
+            "<ol>\n"
+            + "\n".join(quiz_en_items)
+            + "\n</ol>"
+        )
+    else:
+        html_parts.append(
+            "<p>Updating soon.</p>"
+        )
+
+    # =====================================================
+    # QUIZ RUSSIA
+    # =====================================================
+    html_parts.append(
+        "<h2><strong>"
+        "City Holder Daily Quiz Answer For Russia - "
+        f"{safe_date}"
+        "</strong></h2>"
+    )
+
+    if quiz_ru:
+        quiz_ru_items = [
+            f"<li>{html.escape(str(answer))}</li>"
+            for answer in quiz_ru
+        ]
+
+        html_parts.append(
+            "<ol>\n"
+            + "\n".join(quiz_ru_items)
+            + "\n</ol>"
+        )
+    else:
+        html_parts.append(
+            "<p>Updating soon.</p>"
+        )
+
+    html_parts.append(
+        "<p><em>"
+        "Reward: up to 2.5 million in-game coins "
+        "for a correct quiz. Combined with the combo, "
+        "that's the full 7.5 million coin daily cap."
+        "</em></p>"
+    )
+
+    return "\n".join(html_parts)
+
 def build_hamster_cipher_answer_area(
     readable_date,
     word,
@@ -1718,6 +2102,31 @@ def update_existing_answer_content(
         "question_answer",
     )
 
+    if answer_type == "city_holder":
+        answer_area_html = (
+            build_city_holder_answer_area(
+                readable_date=readable_date,
+                combo_lines=answer_data.get(
+                    "combo_lines",
+                    [],
+                ),
+                quiz_en=answer_data.get(
+                    "quiz_en",
+                    [],
+                ),
+                quiz_ru=answer_data.get(
+                    "quiz_ru",
+                    [],
+                ),
+            )
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
+
     if answer_type == "red_packet_codes":
         answer_area_html = (
             build_red_packet_answer_area(
@@ -1812,6 +2221,7 @@ def build_content(
     - hamster_cipher
     - binance_wotd
     - red_packet_codes
+    - city_holder
     """
 
     # -----------------------------------------------------
@@ -1894,6 +2304,50 @@ def build_content(
                 answer_data=answer_data,
                 last_verified_date=answer_data.get(
                     "last_verified_date"
+                ),
+            )
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    # =====================================================
+    # CITY HOLDER
+    # =====================================================
+    elif answer_type == "city_holder":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"City Holder template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
+            )
+
+        answer_area_html = (
+            build_city_holder_answer_area(
+                readable_date=readable_date,
+                combo_lines=answer_data.get(
+                    "combo_lines",
+                    [],
+                ),
+                quiz_en=answer_data.get(
+                    "quiz_en",
+                    [],
+                ),
+                quiz_ru=answer_data.get(
+                    "quiz_ru",
+                    [],
                 ),
             )
         )
@@ -2290,13 +2744,83 @@ def process_game(cfg, ws, game_cfg):
     
     print(f"Processing {game_key} for {date_str}")
 
-    source = fetch_source_page(game_cfg["source_api_url"])
-    source_modified = source.get("modified") or source.get("date") or ""
+    # source = fetch_source_page(game_cfg["source_api_url"])
+    # source_modified = source.get("modified") or source.get("date") or ""
     
-    source_is_today_target = is_source_for_target_date(
-        source_modified,
-        cfg["timezone"],
+    # source_is_today_target = is_source_for_target_date(
+    #     source_modified,
+    #     cfg["timezone"],
+    # )
+
+    source = fetch_source_page(
+        game_cfg["source_api_url"]
     )
+
+    source_modified = (
+        source.get("modified")
+        or source.get("date")
+        or ""
+    )
+
+    source_modified_gmt = (
+        source.get("modified_gmt")
+        or ""
+    )
+
+    source_is_today_target = (
+        is_source_for_target_date(
+            source_modified,
+            cfg["timezone"],
+        )
+    )
+
+    # =====================================================
+    # CITY HOLDER:
+    # modified_gmt được hiểu là UTC,
+    # sau đó đổi sang giờ Việt Nam và so sánh đúng ngày.
+    # =====================================================
+    if (
+        game_cfg.get("answer_type")
+        == "city_holder"
+    ):
+        source_modified_local = (
+            parse_wp_datetime_gmt(
+                source_modified_gmt,
+                cfg["timezone"],
+            )
+        )
+
+        # Fallback nếu API không có modified_gmt.
+        if not source_modified_local:
+            source_modified_local = (
+                parse_wp_datetime_local(
+                    source_modified,
+                    cfg["timezone"],
+                )
+            )
+
+        source_is_today_target = bool(
+            source_modified_local
+            and source_modified_local.date()
+            == target_date_obj
+        )
+
+        # Lưu modified_gmt vào Sheet nếu có.
+        if source_modified_gmt:
+            source_modified = (
+                source_modified_gmt
+            )
+
+        print(
+            "City Holder modified local: "
+            f"{source_modified_local}"
+        )
+
+        print(
+            "City Holder source matches target: "
+            f"{source_is_today_target}"
+        )
+    
     source_content = source.get("content", {}).get("rendered", "")
 
     # question, answer = extract_question_answer(source_content, game_cfg, cfg)
@@ -2451,6 +2975,34 @@ def process_game(cfg, ws, game_cfg):
     
     if run_mode == "update" and not row:
         print("Update mode: today's post log not found, skip.")
+        return
+
+    # City Holder:
+    # Nếu cả Combo, Quiz EN và Quiz RU đều chưa có,
+    # không update lại bài thành toàn bộ Updating soon.
+    if (
+        run_mode == "update"
+        and answer_data.get("answer_type")
+        == "city_holder"
+        and not answer_data.get("has_data")
+    ):
+        print(
+            "City Holder source has no real "
+            "answer data yet. Skip."
+        )
+
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": (
+                    "checked_city_holder_no_data"
+                ),
+                "updated_at": timestamp,
+            },
+        )
+
         return
 
     # Red Packet:
