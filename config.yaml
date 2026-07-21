@@ -205,7 +205,7 @@ games:
     template_file: "games/city-holder.txt"
     featured_media_id: 338431
   
-    publish_time: "22:00"
+    publish_time: "18:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
