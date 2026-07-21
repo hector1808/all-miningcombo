@@ -1193,6 +1193,14 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             )
         )
 
+        has_data = bool(
+            source_date
+            and (
+                quote
+                or author
+            )
+        )
+        
         is_complete = bool(
             source_date
             and quote
@@ -1212,7 +1220,7 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
         # Chỉ tạo check_value khi dữ liệu đầy đủ.
         # Tránh update post khi source mới chỉ có Date
         # nhưng chưa có quote hoặc author.
-        if is_complete:
+        if has_data:
             check_value = json.dumps(
                 answer_payload,
                 ensure_ascii=False,
@@ -1235,6 +1243,7 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             "quote": quote,
             "author": author,
             "is_complete": is_complete,
+            "has_data": has_data,
         }
 
     if answer_type == "hamster_cipher":
@@ -1384,6 +1393,7 @@ def make_waiting_answer_data(
             "quote": "Updating soon.",
             "author": "Updating soon.",
             "is_complete": False,
+            "has_data": False,
         }
 
     if answer_type == "binance_wotd":
@@ -2858,7 +2868,7 @@ def process_game(cfg, ws, game_cfg):
         )
 
         hrum_is_complete = answer_data.get(
-            "is_complete",
+            "has_data",
             False,
         )
 
@@ -2871,10 +2881,10 @@ def process_game(cfg, ws, game_cfg):
                 )
                 return
 
-            if not hrum_is_complete:
+            if not hrum_has_data:
                 print(
-                    "Hrum source is incomplete. "
-                    "Quote or author is missing. Skip."
+                    "Hrum source has no quote "
+                    "or author yet. Skip."
                 )
                 return
 
@@ -2939,7 +2949,7 @@ def process_game(cfg, ws, game_cfg):
         # target đã được đổi thành source date.
         source_is_today_target = bool(
             hrum_source_date
-            and hrum_is_complete
+            and hrum_has_data
             and hrum_source_date
             == target_date_obj
         )
