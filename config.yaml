@@ -123,10 +123,10 @@ games:
   
     check_answer: "DUST"
   
-    title_format: "Today’s Hamster Kombat Daily Combo Answer - {{CURRENT_DATE_READABLE}}"
-    slug_format: "hamster-kombat-daily-combo-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Hamster Kombat Daily Combo ({{CURRENT_DATE_READABLE}}): Today’s Cipher Code"
-    meta_description_format: "Find today's Hamster Kombat Daily Combo for {{CURRENT_DATE_READABLE}}, including the latest Daily Cipher code. Get the exact Hold/Tap pattern for the GameDev puzzle and claim your $HMSTR reward."
+    title_format: "Today’s Hamster Kombat Daily Cipher Code for {{CURRENT_DATE_READABLE}}"
+    slug_format: "today-hamster-kombat-daily-cipher-code-{{CURRENT_DATE_SLUG}}"
+    seo_title_format: "Hamster Kombat Daily Cipher Code Today, {{CURRENT_DATE_READABLE}}"
+    meta_description_format: "Unlock Hamster Kombat Daily Cipher code for {{CURRENT_DATE_READABLE}}, and earn 1,000,000 free Hamster Coins. Learn how to enter Morse code in-game and trade HMSTR tokens on MEXC for real crypto gains."
 
   - game_key: "binance_wotd"
     answer_type: "binance_wotd"
