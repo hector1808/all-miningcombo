@@ -2867,7 +2867,7 @@ def process_game(cfg, ws, game_cfg):
             "source_date"
         )
 
-        hrum_is_complete = answer_data.get(
+        hrum_has_data = answer_data.get(
             "has_data",
             False,
         )
