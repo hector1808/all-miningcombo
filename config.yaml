@@ -217,6 +217,30 @@ games:
     seo_title_format: "City Holder Daily Combo & Quiz Answers Today for {{CURRENT_DATE_READABLE}}"
   
     meta_description_format: "Get today's City Holder Daily Combo & Quiz answers to claim up to 7.5 million in-game coins. Step-by-step guide, tips, and rewards explained."
+
+  - game_key: "money_bux"
+    enabled: true
+  
+    answer_type: "money_bux_codes"
+    post_cycle: "daily"
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/16978"
+    template_file: "games/money-bux.txt"
+  
+    featured_media_id: 338633
+  
+    publish_time: "22:00"
+  
+    answer_placeholder: "{{ANSWER_AREA}}"
+    answer_area_id: "answer-area"
+  
+    title_format: "Get Money Bux Daily Promo Code Today – {{CURRENT_DATE_READABLE}}"
+  
+    slug_format: "money-bux-daily-promo-code-{{CURRENT_DATE_SLUG}}"
+  
+    seo_title_format: "Get Money Bux Daily Promo Code Today - {{CURRENT_DATE_READABLE}}"
+  
+    meta_description_format: "Find today's Money Bux Daily Promo Code, learn how to redeem it, earn daily rewards, and discover other ways to maximize your earnings in the Money Bux Telegram mini app."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
