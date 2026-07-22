@@ -921,6 +921,91 @@ def extract_red_packet_codes(content_html):
         )
     ]
 
+def extract_money_bux_codes(content_html):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    # Chấp nhận:
+    # 03. No Code Is:
+    # 3. No Code Is:
+    # 03. Code Is:
+    code_pattern = re.compile(
+        r"^\s*(\d+)\.\s+"
+        r"(?:No\s+)?"
+        r"Code\s+Is\s*:?",
+        flags=re.I,
+    )
+
+    codes_by_number = {}
+
+    # copy-text chỉ được dùng để nhận dạng
+    # vị trí chứa code trong source.
+    for code_element in soup.select(
+        "span.copy-text"
+    ):
+        paragraph = code_element.find_parent(
+            "p"
+        )
+
+        if not paragraph:
+            continue
+
+        paragraph_text = html.unescape(
+            paragraph.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        match = code_pattern.search(
+            paragraph_text
+        )
+
+        if not match:
+            continue
+
+        number = int(
+            match.group(1)
+        )
+
+        # Ưu tiên data-original-text.
+        # Nếu không có thì lấy text trong span.
+        code = (
+            code_element.get(
+                "data-original-text"
+            )
+            or code_element.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        code = html.unescape(
+            str(code)
+        ).strip()
+
+        if not code:
+            continue
+
+        # Nếu cùng số xuất hiện nhiều lần,
+        # lấy giá trị cuối cùng trong source.
+        codes_by_number[number] = code
+
+    # Chuẩn hóa thứ tự lớn đến nhỏ:
+    # 03, 02, 01
+    return [
+        {
+            "number": number,
+            "code": codes_by_number[number],
+        }
+        for number in sorted(
+            codes_by_number,
+            reverse=True,
+        )
+    ]
+
 def find_pre_after_heading(
     soup,
     heading_match,
@@ -1086,6 +1171,43 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "money_bux_codes":
+        codes = extract_money_bux_codes(
+            content_html
+        )
+
+        # Chuẩn hóa toàn bộ danh sách thành JSON.
+        answer_json = json.dumps(
+            codes,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        # Chỉ tạo hash khi lấy được ít nhất một code.
+        if codes:
+            check_value = hashlib.sha256(
+                answer_json.encode("utf-8")
+            ).hexdigest()
+        else:
+            check_value = ""
+
+        return {
+            "answer_type": "money_bux_codes",
+
+            # Google Sheet.
+            "question": "",
+            "answer": (
+                answer_json
+                if codes
+                else ""
+            ),
+            "check_value": check_value,
+
+            # Dữ liệu dùng để tạo HTML.
+            "codes": codes,
+        }
 
     if answer_type == "city_holder":
         city_data = extract_city_holder_data(
@@ -1361,6 +1483,15 @@ def make_waiting_answer_data(
         "answer_type",
         "question_answer",
     )
+
+    if answer_type == "money_bux_codes":
+        return {
+            "answer_type": "money_bux_codes",
+            "question": "",
+            "answer": "Updating soon.",
+            "check_value": "",
+            "codes": [],
+        }
 
     if answer_type == "city_holder":
         return {
@@ -1661,6 +1792,38 @@ def build_quote_author_answer_area(
 
         "<p><strong>Answer:</strong> "
         f"{safe_author}</p>"
+    )
+
+def build_money_bux_answer_area(
+    codes,
+):
+    if not codes:
+        return "<p>Updating soon.</p>"
+
+    html_parts = []
+
+    for item in codes:
+        number = int(
+            item["number"]
+        )
+
+        code = str(
+            item["code"]
+        ).strip()
+
+        safe_code = html.escape(
+            code
+        )
+
+        html_parts.append(
+            f"<p>"
+            f"{number:02d}. No Code Is: "
+            f"<strong>{safe_code}</strong>"
+            f"</p>"
+        )
+
+    return "\n".join(
+        html_parts
     )
 
 def build_red_packet_answer_area(
@@ -2112,6 +2275,22 @@ def update_existing_answer_content(
         "question_answer",
     )
 
+    if answer_type == "money_bux_codes":
+        answer_area_html = (
+            build_money_bux_answer_area(
+                codes=answer_data.get(
+                    "codes",
+                    [],
+                ),
+            )
+        )
+
+        return replace_answer_area(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            answer_area_html=answer_area_html,
+        )
+
     if answer_type == "city_holder":
         answer_area_html = (
             build_city_holder_answer_area(
@@ -2232,6 +2411,7 @@ def build_content(
     - binance_wotd
     - red_packet_codes
     - city_holder
+    - money_bux_codes
     """
 
     # -----------------------------------------------------
@@ -2314,6 +2494,41 @@ def build_content(
                 answer_data=answer_data,
                 last_verified_date=answer_data.get(
                     "last_verified_date"
+                ),
+            )
+        )
+
+        content = content.replace(
+            placeholder,
+            answer_area_html,
+            1,
+        )
+
+    # =====================================================
+    # MONEY BUX CODES
+    # =====================================================
+    elif answer_type == "money_bux_codes":
+        placeholder = game_cfg.get(
+            "answer_placeholder",
+            "{{ANSWER_AREA}}",
+        )
+
+        placeholder_count = content.count(
+            placeholder
+        )
+
+        if placeholder_count != 1:
+            raise RuntimeError(
+                f"Money Bux template must contain "
+                f"exactly one {placeholder}. "
+                f"Found: {placeholder_count}"
+            )
+
+        answer_area_html = (
+            build_money_bux_answer_area(
+                codes=answer_data.get(
+                    "codes",
+                    [],
                 ),
             )
         )
@@ -3008,6 +3223,34 @@ def process_game(cfg, ws, game_cfg):
                 "source_modified": source_modified,
                 "status": (
                     "checked_city_holder_no_data"
+                ),
+                "updated_at": timestamp,
+            },
+        )
+
+        return
+
+    # Money Bux:
+    # Nếu source tạm thời không lấy được code,
+    # giữ nguyên nội dung WordPress hiện tại.
+    if (
+        run_mode == "update"
+        and answer_data.get("answer_type")
+        == "money_bux_codes"
+        and not answer_data.get("codes")
+    ):
+        print(
+            "No Money Bux codes found "
+            "in source. Skip update."
+        )
+
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": (
+                    "checked_no_money_bux_codes"
                 ),
                 "updated_at": timestamp,
             },
