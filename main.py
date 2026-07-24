@@ -3026,8 +3026,12 @@ def process_game(cfg, ws, game_cfg):
 
         source_is_today_target = bool(
             source_modified_local
-            and source_modified_local.date()
-            == target_date_obj
+            and abs(
+                (
+                    source_modified_local.date()
+                    - target_date_obj
+                ).days
+            ) <= 1
         )
 
         # Lưu modified_gmt vào Sheet nếu có.
