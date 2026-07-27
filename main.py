@@ -3448,7 +3448,11 @@ def process_game(cfg, ws, game_cfg):
             )
     
             post_id = post["id"]
-            post_url = post.get("link", "")
+            
+            post_url = (
+                f"{cfg['wp']['site_url'].rstrip('/')}/"
+                f"{slug.strip('/')}/"
+            )
     
             update_rankmath_meta(
                 cfg,
@@ -3549,7 +3553,11 @@ def process_game(cfg, ws, game_cfg):
         )
     
         post_id = post["id"]
-        post_url = post.get("link", "")
+        
+        post_url = (
+            f"{cfg['wp']['site_url'].rstrip('/')}/"
+            f"{slug.strip('/')}/"
+        )
     
         update_rankmath_meta(
             cfg,
