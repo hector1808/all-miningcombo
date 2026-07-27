@@ -2733,6 +2733,68 @@ def build_content(
         cfg,
     )
 
+def get_tag_ids_for_post_url(
+    cfg,
+    slug,
+):
+    site_url = cfg["wp"]["site_url"].rstrip("/")
+
+    # URL dự kiến dùng để phân loại.
+    # URL thật có thể chứa thêm category,
+    # nhưng slug vẫn là phần nhận dạng chính.
+    post_url = (
+        f"{site_url}/"
+        f"{str(slug).strip('/')}/"
+    ).lower()
+
+    matched_tag_ids = []
+
+    for rule in cfg.get(
+        "tag_rules",
+        [],
+    ):
+        keyword = str(
+            rule.get(
+                "url_contains",
+                "",
+            )
+        ).strip().lower()
+
+        if not keyword:
+            continue
+
+        if keyword not in post_url:
+            continue
+
+        for tag_id in rule.get(
+            "tag_ids",
+            [],
+        ):
+            try:
+                tag_id = int(tag_id)
+            except (TypeError, ValueError):
+                print(
+                    "Invalid tag ID in config: "
+                    f"{tag_id}"
+                )
+                continue
+
+            if tag_id not in matched_tag_ids:
+                matched_tag_ids.append(
+                    tag_id
+                )
+
+    print(
+        f"Tag matching URL: {post_url}"
+    )
+
+    print(
+        f"Matched tag IDs: "
+        f"{matched_tag_ids}"
+    )
+
+    return matched_tag_ids
+
 def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
@@ -2747,6 +2809,19 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
         "author": cfg["wp"]["author_id"],
         "categories": cfg["wp"]["category_ids"],
     }
+
+    tag_ids = get_tag_ids_for_post_url(
+        cfg=cfg,
+        slug=slug,
+    )
+    
+    if tag_ids:
+        payload["tags"] = tag_ids
+    else:
+        print(
+            "No tag rule matched. "
+            "Post will be created without tags."
+    )
 
     if run_mode == "create":
         publish_dt = scheduled_publish_datetime(
@@ -2772,6 +2847,11 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
 
     if featured_media_id:
         payload["featured_media"] = int(featured_media_id)
+
+    print(
+        f"Creating post with tags: "
+        f"{payload.get('tags', [])}"
+    )
 
     r = requests.post(
         url,
