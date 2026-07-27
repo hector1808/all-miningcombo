@@ -3024,15 +3024,31 @@ def process_game(cfg, ws, game_cfg):
                 )
             )
 
-        source_is_today_target = bool(
-            source_modified_local
-            and abs(
-                (
-                    source_modified_local.date()
-                    - target_date_obj
-                ).days
-            ) <= 1
-        )
+        if source_modified_local:
+            source_date_local = (
+                source_modified_local.date()
+            )
+        
+            day_difference = (
+                source_date_local
+                - target_date_obj
+            ).days
+        
+            if run_mode == "update":
+                # Update được phép lệch sớm/chậm 1 ngày.
+                source_is_today_target = (
+                    abs(day_difference) <= 1
+                )
+            else:
+                # Create chỉ lấy đáp án nếu source
+                # thực sự thuộc đúng ngày target.
+                source_is_today_target = (
+                    day_difference == 0
+                )
+        else:
+            source_date_local = None
+            day_difference = None
+            source_is_today_target = False
 
         # Lưu modified_gmt vào Sheet nếu có.
         if source_modified_gmt:
