@@ -38,6 +38,41 @@ auto_links:
   "BTC/USDT": "https://www.mexc.com/exchange/BTC_USDT"
   "ETH/USDT": "https://www.mexc.com/exchange/ETH_USDT"
 
+tag_rules:
+  - url_contains: "spur-protocol-quiz-answer-today"
+    tag_ids:
+      - 16824
+  - url_contains: "syntax-verse-quiz"
+    tag_ids:
+      - 16826
+  - url_contains: "marina-protocol-today-answer"
+    tag_ids:
+      - 16828
+  - url_contains: "dropee-question-of-the-day-answer-today"
+    tag_ids:
+      - 16822
+  - url_contains: "today-hamster-kombat-daily-cipher-code"
+    tag_ids:
+      - 16818
+  - url_contains: "hrum-quote-of-the-day"
+    tag_ids:
+      - 16832
+  - url_contains: "binance-red-packet-code-today"
+    tag_ids:
+      - 16834
+  - url_contains: "city-holder-daily-combo-quiz-answers-today"
+    tag_ids:
+      - 16836
+  - url_contains: "money-bux-daily-promo-code"
+    tag_ids:
+      - 16838
+  - url_contains: "kiedex-daily-quiz-answer-today"
+    tag_ids:
+      - 16840
+  - url_contains: "binance-word-of-the-day-answer"
+    tag_ids:
+      - 16830
+      
 games:
   - game_key: "spur_protocol"
     enabled: true
