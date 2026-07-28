@@ -1,4 +1,4 @@
-name: MiningCombo Auto Publisher
+name: MiningCombo Auto Publisher v2
 
 on:
   workflow_dispatch:
