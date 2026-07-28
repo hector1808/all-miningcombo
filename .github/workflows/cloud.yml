@@ -1,0 +1,43 @@
+name: MiningCombo Auto Publisher
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "Run mode: create or update"
+        required: true
+        default: "update"
+        type: choice
+        options:
+          - create
+          - update
+
+permissions:
+  contents: read
+
+jobs:
+  run_publisher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run selected mode
+        env:
+          RUN_MODE: ${{ inputs.run_mode }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python main.py
