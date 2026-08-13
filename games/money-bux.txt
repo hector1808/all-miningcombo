@@ -1,5 +1,5 @@
 <figure class="wp-block-image size-full">
-  <img src="https://blog.mexc.com/wp-content/uploads/2026/07/money-bux-daily-promo-code-today-feature-img.jpg" alt="Money Bux Daily Promo Code"/>
+  <img src="https://blog.mexc.com/wp-content/uploads/2026/08/money-bux-daily-promo-code-today-feature-img.jpg" alt="Money Bux Daily Promo Code"/>
 </figure>
 <p><span style="font-weight: 400;">Looking for today's </span><strong>Money Bux Daily Promo Code</strong><strong> for {{CURRENT_DATE_READABLE}}</strong><span style="font-weight: 400;">? You're in the right place.</span></p>
 <p><span style="font-weight: 400;">Money Bux is a Telegram-based mining bot launched in January 2024. Users can earn the project’s native cryptocurrency token, $MONEYBUX, by completing activities within the platform, which currently has more than 500,000 users.</span></p>
