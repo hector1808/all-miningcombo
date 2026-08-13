@@ -262,7 +262,7 @@ games:
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/16978"
     template_file: "games/money-bux.txt"
   
-    featured_media_id: 338633
+    featured_media_id: 340270
   
     publish_time: "22:00"
   
@@ -286,7 +286,7 @@ games:
   
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/56812"
     template_file: "games/kiedex-daily-quiz.txt"
-    featured_media_id: 338634
+    featured_media_id: 340269
   
     publish_time: "22:00"
   
