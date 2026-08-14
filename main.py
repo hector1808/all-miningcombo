@@ -2824,24 +2824,34 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     )
 
     if run_mode == "create":
-        publish_dt = scheduled_publish_datetime(
-            tz_name=cfg["timezone"],
-            game_cfg=game_cfg,
-            target_date=target_date,
+        post_cycle = game_cfg.get(
+            "post_cycle",
+            "daily",
         )
-    
-        current_dt = now_local(
-            cfg["timezone"]
-        )
-    
-        if publish_dt > current_dt:
-            payload["status"] = "future"
-            payload["date"] = (
-                publish_dt.isoformat()
-            )
+
+        if post_cycle == "daily":
+            # Daily answer posts luôn được tạo ở dạng draft.
+            # Chỉ publish khi update job lấy được dữ liệu hợp lệ.
+            payload["status"] = "draft"
         else:
-            # Manual create sau thời điểm publish.
-            payload["status"] = "publish"
+            # Giữ nguyên logic schedule cho weekly posts.
+            publish_dt = scheduled_publish_datetime(
+                tz_name=cfg["timezone"],
+                game_cfg=game_cfg,
+                target_date=target_date,
+            )
+
+            current_dt = now_local(
+                cfg["timezone"]
+            )
+
+            if publish_dt > current_dt:
+                payload["status"] = "future"
+                payload["date"] = (
+                    publish_dt.isoformat()
+                )
+            else:
+                payload["status"] = "publish"
     else:
         payload["status"] = "publish"
 
@@ -2866,13 +2876,28 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     return r.json()
 
 
-def update_wp_post(cfg, post_id, content):
+def update_wp_post(
+    cfg,
+    post_id,
+    content,
+    publish_now=False,
+):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts/{post_id}"
+
+    payload = {
+        "content": content,
+    }
+
+    if publish_now:
+        payload["status"] = "publish"
+        payload["date"] = now_local(
+            cfg["timezone"]
+        ).isoformat()
 
     r = requests.post(
         url,
         headers={**wp_headers(cfg), "Content-Type": "application/json"},
-        json={"content": content},
+        json=payload,
         timeout=120,
     )
 
@@ -2938,6 +2963,60 @@ def should_update_answer(current_answer, check_answer):
         return False
 
     return current_answer_norm != check_answer_norm
+
+
+def has_publishable_answer(answer_data):
+    answer_type = answer_data.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "city_holder":
+        # Phương án A: chỉ cần có một phần dữ liệu thật
+        # (Combo, Quiz EN hoặc Quiz RU) là có thể publish.
+        return bool(
+            answer_data.get("has_data")
+        )
+
+    if answer_type in {
+        "money_bux_codes",
+        "red_packet_codes",
+    }:
+        return bool(
+            answer_data.get("codes")
+        )
+
+    if answer_type == "quote_author":
+        # Hrum chỉ publish khi đã có đáp án author.
+        return bool(
+            answer_data.get("source_date")
+            and normalize_answer(
+                answer_data.get("author")
+            )
+        )
+
+    if answer_type == "hamster_cipher":
+        word = normalize_answer(
+            answer_data.get("word")
+        ).lower().rstrip(".")
+
+        return bool(
+            word
+            and word != "updating soon"
+        )
+
+    if answer_type == "question_answer":
+        answer = normalize_answer(
+            answer_data.get("answer")
+        ).lower().rstrip(".")
+
+        return bool(
+            answer
+            and answer != "updating soon"
+        )
+
+    # Weekly WOTD không dùng lifecycle draft daily này.
+    return True
 
 
 def process_game(cfg, ws, game_cfg):
@@ -3505,11 +3584,6 @@ def process_game(cfg, ws, game_cfg):
             or game_cfg.get("check_answer", "")
         )
     
-        answer_changed = should_update_answer(
-            current_check_value,
-            initial_check_answer,
-        )
-    
         crypto_data = fetch_crypto_data(cfg)
         base_snapshot = make_base_snapshot(crypto_data)
     
@@ -3518,18 +3592,15 @@ def process_game(cfg, ws, game_cfg):
             game_key,
             base_snapshot,
         )
-    
-        if answer_changed and source_is_today_target:
-            publish_data = answer_data
-            log_status = "created_with_target_date_answer"
-            new_check_answer = current_check_value
-    
-        else:
-            publish_data = make_waiting_answer_data(
-                game_cfg
-            )
-            log_status = "created_waiting_target_date_answer"
-            new_check_answer = initial_check_answer
+
+        # Daily posts luôn được create dưới dạng draft
+        # với answer area ở trạng thái waiting.
+        # Update job sẽ publish khi có dữ liệu hợp lệ.
+        publish_data = make_waiting_answer_data(
+            game_cfg
+        )
+        log_status = "created_draft_waiting_answer"
+        new_check_answer = initial_check_answer
     
         # Phần này phải nằm ngoài else phía trên.
         content = build_content(
@@ -3875,6 +3946,59 @@ def process_game(cfg, ws, game_cfg):
         })
         return
 
+    publishable_answer = has_publishable_answer(
+        answer_data
+    )
+
+    # Draft chưa có dữ liệu thật thì tuyệt đối không publish.
+    if row_is_waiting and not publishable_answer:
+        print(
+            "No publishable answer yet. "
+            "Keep post as draft."
+        )
+        update_log_row(ws, row_idx, {
+            "source_modified": source_modified,
+            "status": "checked_draft_waiting_answer",
+            "updated_at": timestamp,
+        })
+        return
+
+    # City Holder cho phép source lệch +/-1 ngày khi update.
+    # Nếu post vẫn đang waiting và source không đúng chính xác
+    # target date, cần có ít nhất một tín hiệu mới so với lúc create:
+    # answer/hash đổi hoặc source_modified đổi.
+    if (
+        row_is_waiting
+        and answer_data.get("answer_type")
+        == "city_holder"
+        and day_difference != 0
+    ):
+        sheet_source_modified = str(
+            row.get("source_modified")
+            or ""
+        ).strip()
+
+        source_modified_changed = (
+            str(source_modified).strip()
+            != sheet_source_modified
+        )
+
+        if (
+            not answer_changed
+            and not source_modified_changed
+        ):
+            print(
+                "City Holder source is within +/-1 day "
+                "but no new data signal was detected. "
+                "Keep post as draft."
+            )
+            update_log_row(ws, row_idx, {
+                "source_modified": source_modified,
+                "status": "checked_city_holder_draft_no_new_data",
+                "updated_at": timestamp,
+            })
+            return
+
     if not answer_changed and not row_is_waiting:
         print("Answer unchanged. No post update needed.")
         update_log_row(ws, row_idx, {
@@ -3884,7 +4008,7 @@ def process_game(cfg, ws, game_cfg):
         })
         return
 
-    print("New answer detected. Updating existing post.")
+    print("Valid answer detected. Updating existing post.")
 
     existing_post = get_wp_post(cfg, post_id)
     existing_content = (
@@ -3916,7 +4040,28 @@ def process_game(cfg, ws, game_cfg):
 
     updated_content = auto_link_html(updated_content, cfg)
 
-    update_wp_post(cfg, post_id, updated_content)
+    existing_status = str(
+        existing_post.get("status")
+        or ""
+    ).lower()
+
+    publish_now = existing_status in {
+        "draft",
+        "future",
+        "pending",
+    }
+
+    update_wp_post(
+        cfg,
+        post_id,
+        updated_content,
+        publish_now=publish_now,
+    )
+
+    if publish_now:
+        final_status = "published_with_new_answer"
+    else:
+        final_status = "updated_with_new_answer"
 
     update_log_row(ws, row_idx, {
         "source_modified": source_modified,
@@ -3929,12 +4074,19 @@ def process_game(cfg, ws, game_cfg):
             "",
         ),
         "check_answer": current_check_value,
-        "status": "updated_with_new_answer",
+        "status": final_status,
         "updated_at": timestamp,
     })
 
-    print(f"Updated post {post_id}")
-    print("Status: updated_with_new_answer")
+    if publish_now:
+        print(
+            f"Published post {post_id} "
+            "with valid answer."
+        )
+    else:
+        print(f"Updated post {post_id}")
+
+    print(f"Status: {final_status}")
 
 
 def main():
