@@ -172,7 +172,7 @@ games:
     template_file: "games/binance-wotd.txt"
     featured_media_id: 338326
   
-    publish_time: "22:00"
+    # publish_time: "22:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
@@ -193,7 +193,7 @@ games:
     template_file: "games/hrum-quote.txt"
     featured_media_id: 338383
   
-    publish_time: "22:00"
+    # publish_time: "22:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
@@ -217,7 +217,7 @@ games:
     template_file: "games/binance-red-packet.txt"
     featured_media_id: 338385
   
-    publish_time: "22:00"
+    # publish_time: "22:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
@@ -240,7 +240,7 @@ games:
     template_file: "games/city-holder.txt"
     featured_media_id: 338431
   
-    publish_time: "18:00"
+    # publish_time: "18:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
@@ -264,7 +264,7 @@ games:
   
     featured_media_id: 340270
   
-    publish_time: "22:00"
+    # publish_time: "22:00"
   
     answer_placeholder: "{{ANSWER_AREA}}"
     answer_area_id: "answer-area"
@@ -288,7 +288,7 @@ games:
     template_file: "games/kiedex-daily-quiz.txt"
     featured_media_id: 340269
   
-    publish_time: "22:00"
+    # publish_time: "22:00"
   
     question_selector: "p.wp-block-paragraph"
     answer_selector: "p.wp-block-paragraph"
