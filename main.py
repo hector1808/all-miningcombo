@@ -2896,6 +2896,63 @@ def get_wp_post(cfg, post_id):
 
     return r.json()
 
+def find_wp_posts_by_slug(
+    cfg,
+    slug,
+):
+    url = (
+        f"{cfg['wp']['site_url'].rstrip('/')}"
+        f"/wp-json/wp/v2/posts"
+    )
+
+    clean_slug = normalize_slug(
+        slug
+    )
+
+    # Phải check tất cả status vì mặc định
+    # WordPress REST API chỉ trả published posts.
+    params = [
+        ("context", "edit"),
+        ("slug", clean_slug),
+        ("per_page", 100),
+        (
+            "_fields",
+            "id,slug,status,link,date,modified",
+        ),
+        ("status[]", "publish"),
+        ("status[]", "future"),
+        ("status[]", "draft"),
+        ("status[]", "pending"),
+        ("status[]", "private"),
+    ]
+
+    r = requests.get(
+        url,
+        headers=wp_headers(cfg),
+        params=params,
+        timeout=60,
+    )
+
+    if r.status_code >= 400:
+        raise RuntimeError(
+            f"WordPress slug check failed "
+            f"{r.status_code}: "
+            f"{r.text[:2000]}"
+        )
+
+    posts = r.json()
+
+    # Double-check exact slug.
+    exact_matches = [
+        post
+        for post in posts
+        if normalize_slug(
+            post.get("slug", "")
+        ) == clean_slug
+    ]
+
+    return exact_matches
+
 
 def update_rankmath_meta(cfg, post_id, seo_title, meta_description):
     url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/rankmath/v1/updateMeta"
@@ -3367,6 +3424,158 @@ def process_game(cfg, ws, game_cfg):
     if run_mode == "update" and not row:
         print("Update mode: today's post log not found, skip.")
         return
+
+    # =====================================================
+    # CREATE DUPLICATE GUARD:
+    # Sheet không có row thì check tiếp WordPress.
+    # =====================================================
+    if (
+        run_mode == "create"
+        and not row
+    ):
+        wp_matches = find_wp_posts_by_slug(
+            cfg=cfg,
+            slug=slug,
+        )
+    
+        if len(wp_matches) > 1:
+            duplicate_info = [
+                {
+                    "id": post.get("id"),
+                    "status": post.get("status"),
+                    "slug": post.get("slug"),
+                }
+                for post in wp_matches
+            ]
+    
+            raise RuntimeError(
+                "Multiple WordPress posts found "
+                f"for slug '{slug}': "
+                f"{duplicate_info}"
+            )
+    
+        if len(wp_matches) == 1:
+            existing_wp_post = wp_matches[0]
+    
+            existing_post_id = (
+                existing_wp_post["id"]
+            )
+    
+            existing_status = (
+                existing_wp_post.get(
+                    "status",
+                    "",
+                )
+            )
+    
+            actual_slug = (
+                existing_wp_post.get("slug")
+                or slug
+            )
+    
+            print(
+                "WordPress post already exists."
+            )
+    
+            print(
+                f"Existing ID: "
+                f"{existing_post_id}"
+            )
+    
+            print(
+                f"Existing status: "
+                f"{existing_status}"
+            )
+    
+            print(
+                f"Existing slug: "
+                f"{actual_slug}"
+            )
+
+            # =============================================
+            # Rebuild Sheet row
+            # =============================================
+        
+            if post_cycle == "weekly":
+                recovered_data = (
+                    make_waiting_answer_data(
+                        game_cfg=game_cfg,
+                        campaign_start=campaign_start,
+                        campaign_end=campaign_end,
+                    )
+                )
+        
+                recovered_check_answer = ""
+                recovered_verified_date = ""
+        
+            else:
+                latest_sheet_check_answer = (
+                    get_latest_check_answer_for_game(
+                        ws,
+                        game_key,
+                    )
+                )
+        
+                recovered_check_answer = (
+                    latest_sheet_check_answer
+                    or game_cfg.get(
+                        "check_answer",
+                        "",
+                    )
+                )
+        
+                recovered_data = (
+                    make_waiting_answer_data(
+                        game_cfg
+                    )
+                )
+        
+                recovered_verified_date = ""
+        
+            recovered_post_url = (
+                f"{cfg['wp']['site_url'].rstrip('/')}/"
+                f"{actual_slug.strip('/')}/"
+            )
+        
+            append_log_row(
+                ws,
+                {
+                    "target_date": date_str,
+                    "game_key": game_key,
+                    "post_id": existing_post_id,
+                    "post_url": recovered_post_url,
+                    "slug": actual_slug,
+                    "source_modified": (
+                        source_modified
+                    ),
+                    "question": recovered_data.get(
+                        "question",
+                        "",
+                    ),
+                    "answer": recovered_data.get(
+                        "answer",
+                        "",
+                    ),
+                    "check_answer": (
+                        recovered_check_answer
+                    ),
+                    "verified_date": (
+                        recovered_verified_date
+                    ),
+                    "status": (
+                        "recovered_existing_wp_post"
+                    ),
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
+                },
+            )
+        
+            print(
+                "Recovered missing Sheet row. "
+                "No new WordPress post created."
+            )
+        
+            return
 
     # City Holder:
     # Nếu cả Combo, Quiz EN và Quiz RU đều chưa có,
