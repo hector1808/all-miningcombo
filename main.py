@@ -2824,34 +2824,9 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
     )
 
     if run_mode == "create":
-        post_cycle = game_cfg.get(
-            "post_cycle",
-            "daily",
-        )
-
-        if post_cycle == "daily":
-            # Daily answer posts luôn được tạo ở dạng draft.
-            # Chỉ publish khi update job lấy được dữ liệu hợp lệ.
-            payload["status"] = "draft"
-        else:
-            # Giữ nguyên logic schedule cho weekly posts.
-            publish_dt = scheduled_publish_datetime(
-                tz_name=cfg["timezone"],
-                game_cfg=game_cfg,
-                target_date=target_date,
-            )
-
-            current_dt = now_local(
-                cfg["timezone"]
-            )
-
-            if publish_dt > current_dt:
-                payload["status"] = "future"
-                payload["date"] = (
-                    publish_dt.isoformat()
-                )
-            else:
-                payload["status"] = "publish"
+        # Tất cả post mới đều tạo dưới dạng draft.
+        # Chỉ publish khi update job lấy được answer hợp lệ.
+        payload["status"] = "draft"
     else:
         payload["status"] = "publish"
 
@@ -3005,6 +2980,19 @@ def has_publishable_answer(answer_data):
             and word != "updating soon"
         )
 
+    if answer_type == "binance_wotd":
+        answer_groups = answer_data.get(
+            "answer_groups",
+            {},
+        )
+
+        # Chỉ cần ít nhất một nhóm 3-8 letters
+        # có answer thật là đủ điều kiện publish.
+        return any(
+            bool(answers)
+            for answers in answer_groups.values()
+        )
+
     if answer_type == "question_answer":
         answer = normalize_answer(
             answer_data.get("answer")
@@ -3015,7 +3003,6 @@ def has_publishable_answer(answer_data):
             and answer != "updating soon"
         )
 
-    # Weekly WOTD không dùng lifecycle draft daily này.
     return True
 
 
@@ -3472,30 +3459,20 @@ def process_game(cfg, ws, game_cfg):
         # WEEKLY GAME CREATE
         # =========================================================
         if post_cycle == "weekly":
-            today_date = now_local(
-                cfg["timezone"]
-            ).date()
-    
-            if source_matches_target_week:
-                publish_data = answer_data.copy()
-                publish_data["last_verified_date"] = today_date
-    
-                new_check_answer = current_check_value
-                verified_date = today_date.isoformat()
-                log_status = "created_with_weekly_answers"
-    
-            else:
-                publish_data = make_waiting_answer_data(
-                    game_cfg=game_cfg,
-                    campaign_start=campaign_start,
-                    campaign_end=campaign_end,
-                )
-    
-                publish_data["last_verified_date"] = None
-    
-                new_check_answer = ""
-                verified_date = ""
-                log_status = "created_waiting_weekly_source"
+            # Weekly cũng luôn create dưới dạng draft/waiting.
+            # Update job sẽ publish khi campaign đúng
+            # và source có ít nhất một answer thật.
+            publish_data = make_waiting_answer_data(
+                game_cfg=game_cfg,
+                campaign_start=campaign_start,
+                campaign_end=campaign_end,
+            )
+
+            publish_data["last_verified_date"] = None
+
+            new_check_answer = ""
+            verified_date = ""
+            log_status = "created_draft_waiting_weekly_answer"
     
             crypto_data = fetch_crypto_data(cfg)
             base_snapshot = make_base_snapshot(crypto_data)
@@ -3720,9 +3697,37 @@ def process_game(cfg, ws, game_cfg):
             )
     
             return
+
+        # -----------------------------------------------------
+        # 2. Chỉ publish khi source có ít nhất một answer thật
+        # -----------------------------------------------------
+        publishable_answer = has_publishable_answer(
+            answer_data
+        )
+
+        if not publishable_answer:
+            print(
+                "Weekly source matches campaign "
+                "but has no publishable answers yet. "
+                "Keep post as draft."
+            )
+
+            update_log_row(
+                ws,
+                row_idx,
+                {
+                    "source_modified": source_modified,
+                    "status": (
+                        "checked_weekly_waiting_answer"
+                    ),
+                    "updated_at": timestamp,
+                },
+            )
+
+            return
     
         # -----------------------------------------------------
-        # 2. Lấy ngày hiện tại để cập nhật Last Verified
+        # 3. Lấy ngày hiện tại để cập nhật Last Verified
         # -----------------------------------------------------
         today_date = now_local(
             cfg["timezone"]
@@ -3747,6 +3752,32 @@ def process_game(cfg, ws, game_cfg):
             row.get("verified_date")
             or ""
         ).strip()
+
+        existing_post = get_wp_post(
+            cfg,
+            post_id,
+        )
+
+        existing_status = str(
+            existing_post.get("status")
+            or ""
+        ).lower()
+
+        publish_now = existing_status in {
+            "draft",
+            "future",
+            "pending",
+        }
+
+        print(
+            f"Weekly WordPress status: "
+            f"{existing_status}"
+        )
+
+        print(
+            f"Weekly publish now: "
+            f"{publish_now}"
+        )
     
         # -----------------------------------------------------
         # 4. Kiểm tra lý do cần update
@@ -3792,6 +3823,7 @@ def process_game(cfg, ws, game_cfg):
             not signature_changed
             and not source_modified_changed
             and not not_verified_today
+            and not publish_now
         ):
             print(
                 "Weekly post already verified today "
@@ -3815,11 +3847,6 @@ def process_game(cfg, ws, game_cfg):
         print(
             "Weekly data requires an update. "
             "Fetching existing WordPress post."
-        )
-    
-        existing_post = get_wp_post(
-            cfg,
-            post_id,
         )
     
         existing_content = (
@@ -3864,7 +3891,13 @@ def process_game(cfg, ws, game_cfg):
             cfg,
             post_id,
             updated_content,
+            publish_now=publish_now,
         )
+
+        if publish_now:
+            final_status = "published_weekly_wotd"
+        else:
+            final_status = "updated_weekly_wotd"
     
         # -----------------------------------------------------
         # 10. Update Google Sheet
@@ -3884,7 +3917,7 @@ def process_game(cfg, ws, game_cfg):
                 ),
                 "check_answer": current_check_value,
                 "verified_date": today_str,
-                "status": "updated_weekly_wotd",
+                "status": final_status,
                 "updated_at": timestamp,
             },
         )
@@ -3903,7 +3936,9 @@ def process_game(cfg, ws, game_cfg):
             f"{format_date_readable(today_date)}"
         )
     
-        print("Status: updated_weekly_wotd")
+        print(
+            f"Status: {final_status}"
+        )
     
         return
     
