@@ -123,7 +123,7 @@ games:
     meta_description_format: "Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how SURF Coins and the BAY token actually work right now, and claim your reward before the reset."
 
   - game_key: "dropee_question"
-    enabled: true
+    enabled: false
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/6939"
     template_file: "games/dropee-question.txt"
     featured_media_id: 338223
@@ -166,7 +166,7 @@ games:
   - game_key: "binance_wotd"
     answer_type: "binance_wotd"
     post_cycle: "weekly"
-    enabled: true
+    enabled: false
   
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/25514"
     template_file: "games/binance-wotd.txt"
