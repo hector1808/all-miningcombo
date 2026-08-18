@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 SITE_URL = "https://blog.mexc.com"
 SOURCE_URL = "https://miningcombo.com/wp-json/wp/v2/pages/6939"
-POST_ID = 123456  # <-- thay bằng Dropee post ID thật
+POST_ID = 340602  # <-- thay bằng Dropee post ID thật
 ANSWER_AREA_ID = "dropee-answer-area"
 
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
