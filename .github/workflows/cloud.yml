@@ -78,7 +78,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: python main.py
 
-      - name: Run Dropee fixed post update
+      - name: Run feature.py
         if: always()
         env:
           RUN_MODE: update
