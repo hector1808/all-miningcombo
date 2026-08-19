@@ -368,6 +368,26 @@ def update_wotd():
         top_area,
     )
 
+    toc_link = soup.find(
+        "a",
+        href="#binance-wotd-answer-area",
+    )
+    
+    if toc_link:
+        new_toc_text = (
+            "Binance Word of the Day "
+            f"Answers Today – {d}"
+        )
+    
+        if clean(
+            toc_link.get_text(
+                " ",
+                strip=True,
+            )
+        ) != new_toc_text:
+            toc_link.string = new_toc_text
+            changed = True
+
     for length in range(3, 9):
         heading_id = (
             f"binance-word-of-the-day-"
