@@ -448,7 +448,6 @@ def extract_red_packet_codes(content):
                 or code_element.get_text(" ", strip=True)
             )
         else:
-            # Fallback nếu source bỏ span.copy-text
             code = pattern.sub("", text).strip()
 
         code = clean(code)
@@ -463,6 +462,36 @@ def extract_red_packet_codes(content):
         }
         for number in sorted(codes, reverse=True)
     ]
+
+
+def extract_red_packet_date(source):
+    title = source.get("title", {}).get("rendered", "")
+    content = source.get("content", {}).get("rendered", "")
+
+    soup = BeautifulSoup(
+        f"{title} {content}",
+        "html.parser",
+    )
+
+    text = clean(soup.get_text(" ", strip=True))
+
+    match = re.search(
+        r"\b("
+        r"January|February|March|April|May|June|"
+        r"July|August|September|October|November|December"
+        r")\s+(\d{1,2}),\s+(\d{4})\b",
+        text,
+        re.I,
+    )
+
+    if not match:
+        return ""
+
+    return (
+        f"{match.group(1).title()} "
+        f"{int(match.group(2))}, "
+        f"{match.group(3)}"
+    )
 
 
 def build_red_packet_area(codes, date):
@@ -483,12 +512,10 @@ def build_red_packet_area(codes, date):
     ]
 
     for item in codes:
-        number = item["number"]
-        code = html.escape(item["code"])
-
         parts.append(
             '<p class="wp-block-paragraph">'
-            f"#{number:02d} Code Is:&nbsp;{code}"
+            f"#{item['number']:02d} Code Is:&nbsp;"
+            f"{html.escape(item['code'])}"
             "</p>"
         )
 
@@ -496,22 +523,22 @@ def build_red_packet_area(codes, date):
 
 
 def update_red_packet():
-    d = today()
+    # 1. Fetch MiningCombo
     source = fetch_json(RED_PACKET_SOURCE)
-
-    # Red Packet thay đổi nhiều lần/ngày,
-    # nhưng chỉ dùng source thuộc ngày hôm nay.
-    if source_modified_date(source) != d:
-        print("Red Packet: source is not updated today. Skip.")
-        return
-
     source_html = source.get("content", {}).get("rendered", "")
-    codes = extract_red_packet_codes(source_html)
 
-    if not codes:
-        print("Red Packet: no codes found. Skip.")
+    source_codes = extract_red_packet_codes(source_html)
+    source_date = extract_red_packet_date(source)
+
+    if not source_codes:
+        print("Red Packet: no source codes found. Skip.")
         return
 
+    if not source_date:
+        print("Red Packet: source date not found. Skip.")
+        return
+
+    # 2. Fetch current MEXC post
     post = get_wp_post(RED_PACKET_POST_ID)
     content = post.get("content", {}).get("raw", "")
 
@@ -519,20 +546,43 @@ def update_red_packet():
         raise RuntimeError("Red Packet post content is empty.")
 
     soup = BeautifulSoup(content, "html.parser")
-    date = readable_date(d)
 
-    area = build_red_packet_area(
-        codes,
-        date,
+    target = soup.find(
+        "div",
+        id="red-packet-answer-area",
     )
 
-    if not replace_area(
-        soup,
-        "red-packet-answer-area",
-        area,
-    ):
-        print("Red Packet: already up to date.")
+    if not target:
+        raise RuntimeError(
+            "#red-packet-answer-area not found."
+        )
+
+    # 3. Extract current codes from MEXC
+    current_codes = extract_red_packet_codes(str(target))
+
+    # 4. Compare answers only
+    if current_codes == source_codes:
+        print(
+            f"Red Packet: codes unchanged "
+            f"({len(source_codes)} codes). Skip."
+        )
         return
+
+    # 5. Codes changed → rebuild using source date
+    new_area = build_red_packet_area(
+        source_codes,
+        source_date,
+    )
+
+    target.clear()
+
+    fragment = BeautifulSoup(
+        new_area,
+        "html.parser",
+    )
+
+    for node in list(fragment.contents):
+        target.append(node)
 
     update_wp_post(
         RED_PACKET_POST_ID,
@@ -540,8 +590,9 @@ def update_red_packet():
     )
 
     print(
-        f"Red Packet updated: {date} | "
-        f"{len(codes)} codes"
+        f"Red Packet updated: "
+        f"{len(current_codes)} → {len(source_codes)} codes | "
+        f"Source date: {source_date}"
     )
 
 
