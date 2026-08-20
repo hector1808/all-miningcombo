@@ -2807,7 +2807,10 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
         "lang": cfg["wp"]["language"],
         "content": content,
         "author": cfg["wp"]["author_id"],
-        "categories": cfg["wp"]["category_ids"],
+        "categories": game_cfg.get(
+            "category_ids",
+            cfg["wp"]["category_ids"],
+        ),
     }
 
     tag_ids = get_tag_ids_for_post_url(
