@@ -1,5 +1,6 @@
 import os
 import re
+import html
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -7,23 +8,28 @@ import requests
 from bs4 import BeautifulSoup
 
 
+# =========================================================
+# CONFIG
+# =========================================================
+
 SITE_URL = "https://blog.mexc.com"
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 DROPEE_POST_ID = 340602
-DROPEE_SOURCE_URL = "https://miningcombo.com/wp-json/wp/v2/pages/6939"
-DROPEE_AREA_ID = "dropee-answer-area"
+DROPEE_SOURCE = "https://miningcombo.com/wp-json/wp/v2/pages/6939"
 
 WOTD_POST_ID = 340608
-WOTD_SOURCE_URL = "https://miningcombo.com/wp-json/wp/v2/pages/25514"
-WOTD_AREA_ID = "binance-wotd-answer-area"
+WOTD_SOURCE = "https://miningcombo.com/wp-json/wp/v2/pages/25514"
+
+RED_PACKET_POST_ID = 340688
+RED_PACKET_SOURCE = "https://miningcombo.com/wp-json/wp/v2/pages/26104"
 
 
 # =========================================================
 # COMMON
 # =========================================================
 
-def wp_auth():
+def auth():
     return (
         os.environ["WP_USERNAME"],
         os.environ["WP_APP_PASSWORD"],
@@ -34,7 +40,7 @@ def today():
     return datetime.now(TZ).date()
 
 
-def date_text(d):
+def readable_date(d):
     return f"{d.strftime('%B')} {d.day}, {d.year}"
 
 
@@ -51,58 +57,6 @@ def fetch_json(url):
     r.raise_for_status()
     return r.json()
 
-
-def get_wp_post(post_id):
-    url = f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}?context=edit"
-
-    r = requests.get(
-        url,
-        auth=wp_auth(),
-        timeout=60,
-    )
-    r.raise_for_status()
-
-    return r.json()
-
-
-def update_wp_post(post_id, content):
-    url = f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}"
-
-    r = requests.post(
-        url,
-        auth=wp_auth(),
-        json={"content": content},
-        timeout=120,
-    )
-    r.raise_for_status()
-
-    return r.json()
-
-
-def replace_area(soup, area_id, new_html):
-    target = soup.find("div", id=area_id)
-
-    if not target:
-        raise RuntimeError(f"#{area_id} not found.")
-
-    fragment = BeautifulSoup(new_html, "html.parser")
-
-    if clean(target.get_text(" ", strip=True)) == clean(
-        fragment.get_text(" ", strip=True)
-    ):
-        return False
-
-    target.clear()
-
-    for node in list(fragment.contents):
-        target.append(node)
-
-    return True
-
-
-# =========================================================
-# DROPEE
-# =========================================================
 
 def source_modified_date(source):
     value = source.get("modified_gmt")
@@ -128,6 +82,53 @@ def source_modified_date(source):
     return dt.astimezone(TZ).date()
 
 
+def get_wp_post(post_id):
+    r = requests.get(
+        f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}?context=edit",
+        auth=auth(),
+        timeout=60,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def update_wp_post(post_id, content):
+    r = requests.post(
+        f"{SITE_URL}/wp-json/wp/v2/posts/{post_id}",
+        auth=auth(),
+        json={"content": content},
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def replace_area(soup, area_id, new_html):
+    target = soup.find("div", id=area_id)
+
+    if not target:
+        raise RuntimeError(f"#{area_id} not found.")
+
+    fragment = BeautifulSoup(new_html, "html.parser")
+
+    old_text = clean(target.get_text(" ", strip=True))
+    new_text = clean(fragment.get_text(" ", strip=True))
+
+    if old_text == new_text:
+        return False
+
+    target.clear()
+
+    for node in list(fragment.contents):
+        target.append(node)
+
+    return True
+
+
+# =========================================================
+# DROPEE
+# =========================================================
+
 def extract_prefixed(soup, prefix):
     pattern = re.compile(
         rf"^{re.escape(prefix)}\s*:\s*(.+)$",
@@ -146,11 +147,11 @@ def extract_prefixed(soup, prefix):
 
 
 def update_dropee():
-    current_date = today()
-    source = fetch_json(DROPEE_SOURCE_URL)
+    d = today()
+    source = fetch_json(DROPEE_SOURCE)
 
-    if source_modified_date(source) != current_date:
-        print("Dropee: source is not updated for today. Skip.")
+    if source_modified_date(source) != d:
+        print("Dropee: source is not updated today. Skip.")
         return
 
     source_html = source.get("content", {}).get("rendered", "")
@@ -160,16 +161,16 @@ def update_dropee():
     answer = extract_prefixed(source_soup, "Answer")
 
     if not question or not answer:
-        print("Dropee: question or answer missing. Skip.")
+        print("Dropee: Q/A missing. Skip.")
         return
 
-    d = date_text(current_date)
+    date = readable_date(d)
 
-    new_area = f"""
-<h2 class="wp-block-heading">Dropee Question of the Day Answer Today – {d}</h2>
-<p class="wp-block-paragraph"><strong>Question: <em>{question}</em></strong></p>
-<p class="wp-block-paragraph"><strong>Answer: <em>{answer}</em></strong></p>
-<p class="wp-block-paragraph"><strong>Last updated: {d}</strong></p>
+    area = f"""
+<h2 class="wp-block-heading">Dropee Question of the Day Answer Today – {html.escape(date)}</h2>
+<p class="wp-block-paragraph"><strong>Question: <em>{html.escape(question)}</em></strong></p>
+<p class="wp-block-paragraph"><strong>Answer: <em>{html.escape(answer)}</em></strong></p>
+<p class="wp-block-paragraph"><strong>Last updated: {html.escape(date)}</strong></p>
 """.strip()
 
     post = get_wp_post(DROPEE_POST_ID)
@@ -180,26 +181,22 @@ def update_dropee():
 
     soup = BeautifulSoup(content, "html.parser")
 
-    if not replace_area(soup, DROPEE_AREA_ID, new_area):
+    if not replace_area(soup, "dropee-answer-area", area):
         print("Dropee: already up to date.")
         return
 
     update_wp_post(DROPEE_POST_ID, str(soup))
 
-    print(
-        f"Dropee updated: {d} | "
-        f"Question: {question} | "
-        f"Answer: {answer}"
-    )
+    print(f"Dropee updated: {date} | {answer}")
 
 
 # =========================================================
 # BINANCE WOTD
 # =========================================================
 
-def expected_wotd_campaign(current_date):
-    days_since_sunday = (current_date.weekday() + 1) % 7
-    sunday = current_date - timedelta(days=days_since_sunday)
+def expected_wotd_campaign(d):
+    days_since_sunday = (d.weekday() + 1) % 7
+    sunday = d - timedelta(days=days_since_sunday)
 
     return (
         sunday + timedelta(days=1),
@@ -212,23 +209,19 @@ def extract_wotd(content):
 
     theme = ""
     reward = ""
-    campaign_start = None
-    campaign_end = None
+    start = None
+    end = None
     groups = {}
 
-    summary = None
-
+    # Theme + Date + Prize Pool
     for p in soup.find_all("p"):
         text = clean(p.get_text(" ", strip=True))
 
-        if re.search(r"\bTheme\s*:", text, re.I) and re.search(
-            r"\bDate\s*:", text, re.I
+        if not (
+            re.search(r"\bTheme\s*:", text, re.I)
+            and re.search(r"\bDate\s*:", text, re.I)
         ):
-            summary = p
-            break
-
-    if summary:
-        text = clean(summary.get_text(" ", strip=True))
+            continue
 
         match = re.search(
             r"Theme\s*:\s*(.*?)\s+Date\s*:",
@@ -239,42 +232,36 @@ def extract_wotd(content):
         if match:
             theme = match.group(1).strip()
 
-        date_match = re.search(
+        match = re.search(
             r"Date\s*:\s*(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})",
             text,
             re.I,
         )
 
-        if date_match:
-            campaign_start = datetime.fromisoformat(
-                date_match.group(1)
-            ).date()
+        if match:
+            start = datetime.fromisoformat(match.group(1)).date()
+            end = datetime.fromisoformat(match.group(2)).date()
 
-            campaign_end = datetime.fromisoformat(
-                date_match.group(2)
-            ).date()
+        for mark in p.find_all("mark"):
+            mark_text = clean(mark.get_text(" ", strip=True))
 
-            after_dates = text[date_match.end():]
+            if "to be shared" in mark_text.lower():
+                reward = mark_text
+                break
 
-            reward_match = re.search(
+        if not reward:
+            match = re.search(
                 r"([0-9][A-Za-z0-9 .,+-]*?to be shared!?)",
-                after_dates,
+                text,
                 re.I,
             )
 
-            if reward_match:
-                reward = reward_match.group(1).strip()
+            if match:
+                reward = match.group(1).strip()
 
-        if not reward:
-            for mark in summary.find_all("mark"):
-                mark_text = clean(
-                    mark.get_text(" ", strip=True)
-                )
+        break
 
-                if "to be shared" in mark_text.lower():
-                    reward = mark_text
-                    break
-
+    # 3-8 letter answers
     for h3 in soup.find_all("h3"):
         match = re.search(
             r"Answer\s+(\d+)\s+letters",
@@ -298,7 +285,7 @@ def extract_wotd(content):
             else []
         )
 
-    return theme, reward, campaign_start, campaign_end, groups
+    return theme, reward, start, end, groups
 
 
 def find_ul_after_heading(h3):
@@ -315,24 +302,19 @@ def find_ul_after_heading(h3):
 
 
 def update_wotd():
-    current_date = today()
-    expected_start, expected_end = expected_wotd_campaign(current_date)
+    d = today()
+    expected_start, expected_end = expected_wotd_campaign(d)
 
-    source = fetch_json(WOTD_SOURCE_URL)
+    source = fetch_json(WOTD_SOURCE)
     source_html = source.get("content", {}).get("rendered", "")
 
-    theme, reward, campaign_start, campaign_end, groups = extract_wotd(
-        source_html
-    )
+    theme, reward, start, end, groups = extract_wotd(source_html)
 
-    if (
-        campaign_start != expected_start
-        or campaign_end != expected_end
-    ):
+    if start != expected_start or end != expected_end:
         print(
-            "WOTD: source campaign does not match current campaign. "
+            f"WOTD: wrong campaign. "
             f"Expected {expected_start} to {expected_end}, "
-            f"got {campaign_start} to {campaign_end}. Skip."
+            f"got {start} to {end}. Skip."
         )
         return
 
@@ -347,77 +329,72 @@ def update_wotd():
         raise RuntimeError("WOTD post content is empty.")
 
     soup = BeautifulSoup(content, "html.parser")
-    d = date_text(current_date)
+    date = readable_date(d)
 
-    h2_id = (
+    heading_id = (
         "binance-word-of-the-day-answers-today-"
-        + current_date.strftime("%B-%d-%Y").lower()
+        + d.strftime("%B-%d-%Y").lower()
     )
 
-    top_area = f"""
-<h2 id="{h2_id}" class="wp-block-heading">Binance Word of the Day Answers Today – {d}</h2>
-<p class="wp-block-paragraph"><strong>Theme:</strong> {theme or "Updating soon."}</p>
-<p class="wp-block-paragraph"><strong>Activity Dates: </strong>{campaign_start} to {campaign_end}</p>
-<p class="wp-block-paragraph"><strong>Last updated: </strong>{d}</p>
-<p class="wp-block-paragraph"><strong>Prize Pool:</strong> {reward or "Updating soon."}</p>
+    area = f"""
+<h2 id="{heading_id}" class="wp-block-heading">Binance Word of the Day Answers Today – {html.escape(date)}</h2>
+<p class="wp-block-paragraph"><strong>Theme:</strong> {html.escape(theme or "Updating soon.")}</p>
+<p class="wp-block-paragraph"><strong>Activity Dates: </strong>{start} to {end}</p>
+<p class="wp-block-paragraph"><strong>Last updated: </strong>{html.escape(date)}</p>
+<p class="wp-block-paragraph"><strong>Prize Pool:</strong> {html.escape(reward or "Updating soon.")}</p>
 """.strip()
 
     changed = replace_area(
         soup,
-        WOTD_AREA_ID,
-        top_area,
+        "binance-wotd-answer-area",
+        area,
     )
 
-    toc_link = soup.find(
+    # Update Rank Math TOC text
+    toc = soup.find(
         "a",
         href="#binance-wotd-answer-area",
     )
-    
-    if toc_link:
-        new_toc_text = (
-            "Binance Word of the Day "
-            f"Answers Today – {d}"
-        )
-    
-        if clean(
-            toc_link.get_text(
-                " ",
-                strip=True,
-            )
-        ) != new_toc_text:
-            toc_link.string = new_toc_text
-            changed = True
 
+    new_toc_text = (
+        f"Binance Word of the Day Answers Today – {date}"
+    )
+
+    if toc and clean(toc.get_text(" ", strip=True)) != new_toc_text:
+        toc.string = new_toc_text
+        changed = True
+
+    # Update answer ULs
     for length in range(3, 9):
-        heading_id = (
+        h3_id = (
             f"binance-word-of-the-day-"
             f"{length}-letter-answers"
         )
 
-        h3 = soup.find("h3", id=heading_id)
+        h3 = soup.find("h3", id=h3_id)
 
         if not h3:
             raise RuntimeError(
-                f"WOTD heading not found: #{heading_id}"
+                f"WOTD heading not found: #{h3_id}"
             )
 
         ul = find_ul_after_heading(h3)
 
         if not ul:
             raise RuntimeError(
-                f"WOTD answer list not found after #{heading_id}"
+                f"WOTD UL not found after #{h3_id}"
             )
 
         new_answers = groups.get(str(length), []) or [
             "Updating soon."
         ]
 
-        current_answers = [
+        old_answers = [
             clean(li.get_text(" ", strip=True))
             for li in ul.find_all("li", recursive=False)
         ]
 
-        if current_answers == new_answers:
+        if old_answers == new_answers:
             continue
 
         ul.clear()
@@ -436,15 +413,136 @@ def update_wotd():
     update_wp_post(WOTD_POST_ID, str(soup))
 
     print(
-        f"WOTD updated: {d} | "
-        f"Campaign: {campaign_start} to {campaign_end}"
+        f"WOTD updated: {date} | "
+        f"{start} to {end}"
     )
 
-    for length in range(3, 9):
-        print(
-            f"{length} letters: "
-            f"{groups.get(str(length), [])}"
+
+# =========================================================
+# BINANCE RED PACKET
+# =========================================================
+
+def extract_red_packet_codes(content):
+    soup = BeautifulSoup(content, "html.parser")
+
+    pattern = re.compile(
+        r"^\s*#\s*(\d+)\s+(?:No\s+)?Code\s+Is\s*:?",
+        re.I,
+    )
+
+    codes = {}
+
+    for p in soup.find_all("p"):
+        text = clean(p.get_text(" ", strip=True))
+        match = pattern.search(text)
+
+        if not match:
+            continue
+
+        number = int(match.group(1))
+        code_element = p.select_one("span.copy-text")
+
+        if code_element:
+            code = (
+                code_element.get("data-original-text")
+                or code_element.get_text(" ", strip=True)
+            )
+        else:
+            # Fallback nếu source bỏ span.copy-text
+            code = pattern.sub("", text).strip()
+
+        code = clean(code)
+
+        if code:
+            codes[number] = code
+
+    return [
+        {
+            "number": number,
+            "code": codes[number],
+        }
+        for number in sorted(codes, reverse=True)
+    ]
+
+
+def build_red_packet_area(codes, date):
+    parts = [
+        (
+            '<h2 class="wp-block-heading">'
+            "Binance Red Packet Codes Today "
+            f"<strong>for {html.escape(date)} "
+            "(Updated Hourly)</strong>"
+            "</h2>"
+        ),
+        (
+            '<p class="wp-block-paragraph">'
+            "<strong>Last updated:</strong> "
+            f"{html.escape(date)}"
+            "</p>"
+        ),
+    ]
+
+    for item in codes:
+        number = item["number"]
+        code = html.escape(item["code"])
+
+        parts.append(
+            '<p class="wp-block-paragraph">'
+            f"#{number:02d} Code Is:&nbsp;{code}"
+            "</p>"
         )
+
+    return "\n".join(parts)
+
+
+def update_red_packet():
+    d = today()
+    source = fetch_json(RED_PACKET_SOURCE)
+
+    # Red Packet thay đổi nhiều lần/ngày,
+    # nhưng chỉ dùng source thuộc ngày hôm nay.
+    if source_modified_date(source) != d:
+        print("Red Packet: source is not updated today. Skip.")
+        return
+
+    source_html = source.get("content", {}).get("rendered", "")
+    codes = extract_red_packet_codes(source_html)
+
+    if not codes:
+        print("Red Packet: no codes found. Skip.")
+        return
+
+    post = get_wp_post(RED_PACKET_POST_ID)
+    content = post.get("content", {}).get("raw", "")
+
+    if not content:
+        raise RuntimeError("Red Packet post content is empty.")
+
+    soup = BeautifulSoup(content, "html.parser")
+    date = readable_date(d)
+
+    area = build_red_packet_area(
+        codes,
+        date,
+    )
+
+    if not replace_area(
+        soup,
+        "red-packet-answer-area",
+        area,
+    ):
+        print("Red Packet: already up to date.")
+        return
+
+    update_wp_post(
+        RED_PACKET_POST_ID,
+        str(soup),
+    )
+
+    print(
+        f"Red Packet updated: {date} | "
+        f"{len(codes)} codes"
+    )
 
 
 # =========================================================
@@ -459,6 +557,7 @@ def main():
     tasks = [
         ("Dropee", update_dropee),
         ("Binance WOTD", update_wotd),
+        ("Binance Red Packet", update_red_packet),
     ]
 
     for name, task in tasks:
