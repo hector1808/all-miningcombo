@@ -465,21 +465,11 @@ def extract_red_packet_codes(content):
 
 
 def extract_red_packet_date(source):
-    title = source.get("title", {}).get("rendered", "")
     content = source.get("content", {}).get("rendered", "")
-
-    soup = BeautifulSoup(
-        f"{title} {content}",
-        "html.parser",
-    )
-
-    text = clean(soup.get_text(" ", strip=True))
+    text = clean(BeautifulSoup(content, "html.parser").get_text(" ", strip=True))
 
     match = re.search(
-        r"\b("
-        r"January|February|March|April|May|June|"
-        r"July|August|September|October|November|December"
-        r")\s+(\d{1,2}),\s+(\d{4})\b",
+        r"Date\s*:\s*(\d{1,2})/(\d{1,2})/(\d{4})",
         text,
         re.I,
     )
@@ -487,10 +477,10 @@ def extract_red_packet_date(source):
     if not match:
         return ""
 
-    return (
-        f"{match.group(1).title()} "
-        f"{int(match.group(2))}, "
-        f"{match.group(3)}"
+    day, month, year = map(int, match.groups())
+
+    return readable_date(
+        datetime(year, month, day).date()
     )
 
 
