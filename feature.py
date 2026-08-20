@@ -464,26 +464,6 @@ def extract_red_packet_codes(content):
     ]
 
 
-def extract_red_packet_date(source):
-    content = source.get("content", {}).get("rendered", "")
-    text = clean(BeautifulSoup(content, "html.parser").get_text(" ", strip=True))
-
-    match = re.search(
-        r"Date\s*:\s*(\d{1,2})/(\d{1,2})/(\d{4})",
-        text,
-        re.I,
-    )
-
-    if not match:
-        return ""
-
-    day, month, year = map(int, match.groups())
-
-    return readable_date(
-        datetime(year, month, day).date()
-    )
-
-
 def build_red_packet_area(codes, date):
     parts = [
         (
@@ -513,22 +493,20 @@ def build_red_packet_area(codes, date):
 
 
 def update_red_packet():
-    # 1. Fetch MiningCombo
+    # 1. Fetch codes from MiningCombo
     source = fetch_json(RED_PACKET_SOURCE)
     source_html = source.get("content", {}).get("rendered", "")
 
     source_codes = extract_red_packet_codes(source_html)
-    source_date = extract_red_packet_date(source)
 
     if not source_codes:
         print("Red Packet: no source codes found. Skip.")
         return
 
-    if not source_date:
-        print("Red Packet: source date not found. Skip.")
-        return
+    # 2. Current date = GMT+7
+    current_date = readable_date(today())
 
-    # 2. Fetch current MEXC post
+    # 3. Fetch current MEXC post
     post = get_wp_post(RED_PACKET_POST_ID)
     content = post.get("content", {}).get("raw", "")
 
@@ -547,21 +525,24 @@ def update_red_packet():
             "#red-packet-answer-area not found."
         )
 
-    # 3. Extract current codes from MEXC
+    # 4. Compare current codes
     current_codes = extract_red_packet_codes(str(target))
 
-    # 4. Compare answers only
-    if current_codes == source_codes:
+    # 5. Check whether displayed date is already today
+    current_text = clean(target.get_text(" ", strip=True))
+    date_is_current = current_date in current_text
+
+    if current_codes == source_codes and date_is_current:
         print(
-            f"Red Packet: codes unchanged "
-            f"({len(source_codes)} codes). Skip."
+            f"Red Packet: unchanged "
+            f"({len(source_codes)} codes, {current_date}). Skip."
         )
         return
 
-    # 5. Codes changed → rebuild using source date
+    # 6. Rebuild using current GMT+7 date
     new_area = build_red_packet_area(
         source_codes,
-        source_date,
+        current_date,
     )
 
     target.clear()
@@ -582,7 +563,7 @@ def update_red_packet():
     print(
         f"Red Packet updated: "
         f"{len(current_codes)} → {len(source_codes)} codes | "
-        f"Source date: {source_date}"
+        f"Date: {current_date}"
     )
 
 
