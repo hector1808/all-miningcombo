@@ -208,7 +208,7 @@ games:
 
   
   - game_key: "binance_red_packet"
-    enabled: true
+    enabled: false
   
     answer_type: "red_packet_codes"
     post_cycle: "daily"
