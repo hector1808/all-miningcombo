@@ -301,6 +301,90 @@ def find_ul_after_heading(h3):
     return None
 
 
+def find_wotd_table(soup):
+    heading = soup.find(
+        "h3",
+        id="binance-word-of-the-day-for-this-week",
+    )
+
+    if not heading:
+        raise RuntimeError(
+            "WOTD table heading not found: "
+            "#binance-word-of-the-day-for-this-week"
+        )
+
+    # Find the first table after this heading,
+    # stopping before the next heading.
+    for node in heading.next_elements:
+        name = getattr(node, "name", None)
+
+        if node is not heading and name in {"h2", "h3"}:
+            break
+
+        if name == "table":
+            return node
+
+    raise RuntimeError("WOTD answer table not found.")
+
+
+def update_wotd_table(soup, groups):
+    table = find_wotd_table(soup)
+    changed = False
+    found_lengths = set()
+
+    for row in table.find_all("tr"):
+        cells = row.find_all(["td", "th"])
+
+        if len(cells) < 2:
+            continue
+
+        label = clean(cells[0].get_text(" ", strip=True))
+
+        match = re.fullmatch(
+            r"([3-8])\s+letters?",
+            label,
+            re.I,
+        )
+
+        if not match:
+            continue
+
+        length = match.group(1)
+        found_lengths.add(length)
+
+        answers = groups.get(length, []) or [
+            "Updating soon."
+        ]
+
+        new_text = ", ".join(answers)
+        current_text = clean(
+            cells[1].get_text(" ", strip=True)
+        )
+
+        if current_text == new_text:
+            continue
+
+        cells[1].clear()
+        cells[1].string = new_text
+        changed = True
+
+    missing = {
+        str(length)
+        for length in range(3, 9)
+    } - found_lengths
+
+    if missing:
+        raise RuntimeError(
+            "WOTD table rows missing for: "
+            + ", ".join(
+                f"{length} letters"
+                for length in sorted(missing)
+            )
+        )
+
+    return changed
+
+
 def update_wotd():
     d = today()
     expected_start, expected_end = expected_wotd_campaign(d)
@@ -308,7 +392,9 @@ def update_wotd():
     source = fetch_json(WOTD_SOURCE)
     source_html = source.get("content", {}).get("rendered", "")
 
-    theme, reward, start, end, groups = extract_wotd(source_html)
+    theme, reward, start, end, groups = extract_wotd(
+        source_html
+    )
 
     if start != expected_start or end != expected_end:
         print(
@@ -331,6 +417,10 @@ def update_wotd():
     soup = BeautifulSoup(content, "html.parser")
     date = readable_date(d)
 
+    # -----------------------------------------------------
+    # 1. Update main answer area
+    # -----------------------------------------------------
+
     heading_id = (
         "binance-word-of-the-day-answers-today-"
         + d.strftime("%B-%d-%Y").lower()
@@ -350,7 +440,10 @@ def update_wotd():
         area,
     )
 
-    # Update Rank Math TOC text
+    # -----------------------------------------------------
+    # 2. Update Rank Math TOC text
+    # -----------------------------------------------------
+
     toc = soup.find(
         "a",
         href="#binance-wotd-answer-area",
@@ -360,11 +453,25 @@ def update_wotd():
         f"Binance Word of the Day Answers Today – {date}"
     )
 
-    if toc and clean(toc.get_text(" ", strip=True)) != new_toc_text:
+    if (
+        toc
+        and clean(toc.get_text(" ", strip=True))
+        != new_toc_text
+    ):
         toc.string = new_toc_text
         changed = True
 
-    # Update answer ULs
+    # -----------------------------------------------------
+    # 3. Update summary table
+    # -----------------------------------------------------
+
+    if update_wotd_table(soup, groups):
+        changed = True
+
+    # -----------------------------------------------------
+    # 4. Update detailed answer ULs
+    # -----------------------------------------------------
+
     for length in range(3, 9):
         h3_id = (
             f"binance-word-of-the-day-"
@@ -385,13 +492,17 @@ def update_wotd():
                 f"WOTD UL not found after #{h3_id}"
             )
 
-        new_answers = groups.get(str(length), []) or [
-            "Updating soon."
-        ]
+        new_answers = groups.get(
+            str(length),
+            [],
+        ) or ["Updating soon."]
 
         old_answers = [
             clean(li.get_text(" ", strip=True))
-            for li in ul.find_all("li", recursive=False)
+            for li in ul.find_all(
+                "li",
+                recursive=False,
+            )
         ]
 
         if old_answers == new_answers:
@@ -406,11 +517,18 @@ def update_wotd():
 
         changed = True
 
+    # -----------------------------------------------------
+    # 5. Save only when something changed
+    # -----------------------------------------------------
+
     if not changed:
         print("WOTD: already up to date.")
         return
 
-    update_wp_post(WOTD_POST_ID, str(soup))
+    update_wp_post(
+        WOTD_POST_ID,
+        str(soup),
+    )
 
     print(
         f"WOTD updated: {date} | "
