@@ -79,7 +79,6 @@ games:
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/18133"
     template_file: "games/spur-protocol.txt"
     featured_media_id: 337753
-    # category_ids: [7]
 
     check_answer: "C) Previous block hash."
     answer_heading_contains: "Spur Protocol Quiz Answers Today"
