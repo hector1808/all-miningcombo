@@ -148,31 +148,23 @@ def extract_prefixed(soup, prefix):
 
 def update_dropee():
     d = today()
+    date = readable_date(d)
+
+    # Fetch source
     source = fetch_json(DROPEE_SOURCE)
-
-    if source_modified_date(source) != d:
-        print("Dropee: source is not updated today. Skip.")
-        return
-
     source_html = source.get("content", {}).get("rendered", "")
     source_soup = BeautifulSoup(source_html, "html.parser")
 
-    question = extract_prefixed(source_soup, "Question")
-    answer = extract_prefixed(source_soup, "Answer")
+    source_question = extract_prefixed(source_soup, "Question")
+    source_answer = extract_prefixed(source_soup, "Answer")
 
-    if not question or not answer:
-        print("Dropee: Q/A missing. Skip.")
-        return
+    source_ready = (
+        source_modified_date(source) == d
+        and bool(source_question)
+        and bool(source_answer)
+    )
 
-    date = readable_date(d)
-
-    area = f"""
-<h2 class="wp-block-heading">Dropee Question of the Day Answer Today – {html.escape(date)}</h2>
-<p class="wp-block-paragraph"><strong>Question: <em>{html.escape(question)}</em></strong></p>
-<p class="wp-block-paragraph"><strong>Answer: <em>{html.escape(answer)}</em></strong></p>
-<p class="wp-block-paragraph"><strong>Last updated: {html.escape(date)}</strong></p>
-""".strip()
-
+    # Fetch current MEXC post
     post = get_wp_post(DROPEE_POST_ID)
     content = post.get("content", {}).get("raw", "")
 
@@ -181,13 +173,70 @@ def update_dropee():
 
     soup = BeautifulSoup(content, "html.parser")
 
-    if not replace_area(soup, "dropee-answer-area", area):
+    target = soup.find(
+        "div",
+        id="dropee-answer-area",
+    )
+
+    if not target:
+        raise RuntimeError(
+            "#dropee-answer-area not found."
+        )
+
+    # Keep current Q/A if MiningCombo has not updated yet
+    current_question = extract_prefixed(
+        target,
+        "Question",
+    )
+    current_answer = extract_prefixed(
+        target,
+        "Answer",
+    )
+
+    if source_ready:
+        question = source_question
+        answer = source_answer
+    else:
+        question = current_question
+        answer = current_answer
+
+    if not question or not answer:
+        print(
+            "Dropee: no usable Q/A in source "
+            "or current post. Skip."
+        )
+        return
+
+    area = f"""
+<h2 class="wp-block-heading">Dropee Question of the Day Answer Today – {html.escape(date)}</h2>
+<p class="wp-block-paragraph"><strong>Question: <em>{html.escape(question)}</em></strong></p>
+<p class="wp-block-paragraph"><strong>Answer: <em>{html.escape(answer)}</em></strong></p>
+<p class="wp-block-paragraph"><strong>Last updated: {html.escape(date)}</strong></p>
+""".strip()
+
+    if not replace_area(
+        soup,
+        "dropee-answer-area",
+        area,
+    ):
         print("Dropee: already up to date.")
         return
 
-    update_wp_post(DROPEE_POST_ID, str(soup))
+    update_wp_post(
+        DROPEE_POST_ID,
+        str(soup),
+    )
 
-    print(f"Dropee updated: {date} | {answer}")
+    if source_ready:
+        print(
+            f"Dropee updated: {date} | "
+            f"new source answer: {answer}"
+        )
+    else:
+        print(
+            f"Dropee date refreshed: {date} | "
+            "source has not updated yet, kept current Q/A."
+        )
 
 
 # =========================================================
@@ -385,40 +434,135 @@ def update_wotd_table(soup, groups):
     return changed
 
 
+def extract_wotd_current_meta(area):
+    theme = ""
+    reward = ""
+
+    for p in area.find_all("p"):
+        text = clean(
+            p.get_text(" ", strip=True)
+        )
+
+        match = re.match(
+            r"^Theme\s*:\s*(.+)$",
+            text,
+            re.I,
+        )
+
+        if match:
+            theme = match.group(1).strip()
+            continue
+
+        match = re.match(
+            r"^Prize Pool\s*:\s*(.+)$",
+            text,
+            re.I,
+        )
+
+        if match:
+            reward = match.group(1).strip()
+
+    return theme, reward
+
 def update_wotd():
     d = today()
-    expected_start, expected_end = expected_wotd_campaign(d)
+    date = readable_date(d)
+
+    expected_start, expected_end = (
+        expected_wotd_campaign(d)
+    )
+
+    # -----------------------------------------------------
+    # 1. Fetch MiningCombo
+    # -----------------------------------------------------
 
     source = fetch_json(WOTD_SOURCE)
-    source_html = source.get("content", {}).get("rendered", "")
+    source_html = source.get(
+        "content",
+        {},
+    ).get("rendered", "")
 
     theme, reward, start, end, groups = extract_wotd(
         source_html
     )
 
-    if start != expected_start or end != expected_end:
-        print(
-            f"WOTD: wrong campaign. "
-            f"Expected {expected_start} to {expected_end}, "
-            f"got {start} to {end}. Skip."
-        )
-        return
+    campaign_ready = (
+        start == expected_start
+        and end == expected_end
+    )
 
-    if not any(groups.values()):
-        print("WOTD: no answers found. Skip.")
-        return
-
-    post = get_wp_post(WOTD_POST_ID)
-    content = post.get("content", {}).get("raw", "")
-
-    if not content:
-        raise RuntimeError("WOTD post content is empty.")
-
-    soup = BeautifulSoup(content, "html.parser")
-    date = readable_date(d)
+    answers_ready = (
+        campaign_ready
+        and any(groups.values())
+    )
 
     # -----------------------------------------------------
-    # 1. Update main answer area
+    # 2. Fetch current MEXC post
+    # -----------------------------------------------------
+
+    post = get_wp_post(WOTD_POST_ID)
+    content = post.get(
+        "content",
+        {},
+    ).get("raw", "")
+
+    if not content:
+        raise RuntimeError(
+            "WOTD post content is empty."
+        )
+
+    soup = BeautifulSoup(
+        content,
+        "html.parser",
+    )
+
+    current_area = soup.find(
+        "div",
+        id="binance-wotd-answer-area",
+    )
+
+    if not current_area:
+        raise RuntimeError(
+            "#binance-wotd-answer-area not found."
+        )
+
+    current_theme, current_reward = (
+        extract_wotd_current_meta(
+            current_area
+        )
+    )
+
+    # -----------------------------------------------------
+    # 3. Theme / Prize only use new source
+    #    when current campaign is ready
+    # -----------------------------------------------------
+
+    if campaign_ready:
+        display_theme = (
+            theme
+            or current_theme
+            or "Updating soon."
+        )
+
+        display_reward = (
+            reward
+            or current_reward
+            or "Updating soon."
+        )
+
+    else:
+        display_theme = (
+            current_theme
+            or "Updating soon."
+        )
+
+        display_reward = (
+            current_reward
+            or "Updating soon."
+        )
+
+    # -----------------------------------------------------
+    # 4. Always refresh current date + current week
     # -----------------------------------------------------
 
     heading_id = (
@@ -428,10 +572,10 @@ def update_wotd():
 
     area = f"""
 <h2 id="{heading_id}" class="wp-block-heading">Binance Word of the Day Answers Today – {html.escape(date)}</h2>
-<p class="wp-block-paragraph"><strong>Theme:</strong> {html.escape(theme or "Updating soon.")}</p>
-<p class="wp-block-paragraph"><strong>Activity Dates: </strong>{start} to {end}</p>
+<p class="wp-block-paragraph"><strong>Theme:</strong> {html.escape(display_theme)}</p>
+<p class="wp-block-paragraph"><strong>Activity Dates: </strong>{expected_start} to {expected_end}</p>
 <p class="wp-block-paragraph"><strong>Last updated: </strong>{html.escape(date)}</p>
-<p class="wp-block-paragraph"><strong>Prize Pool:</strong> {html.escape(reward or "Updating soon.")}</p>
+<p class="wp-block-paragraph"><strong>Prize Pool:</strong> {html.escape(display_reward)}</p>
 """.strip()
 
     changed = replace_area(
@@ -441,7 +585,7 @@ def update_wotd():
     )
 
     # -----------------------------------------------------
-    # 2. Update Rank Math TOC text
+    # 5. Always refresh Rank Math TOC date
     # -----------------------------------------------------
 
     toc = soup.find(
@@ -450,75 +594,113 @@ def update_wotd():
     )
 
     new_toc_text = (
-        f"Binance Word of the Day Answers Today – {date}"
+        "Binance Word of the Day "
+        f"Answers Today – {date}"
     )
 
     if (
         toc
-        and clean(toc.get_text(" ", strip=True))
-        != new_toc_text
+        and clean(
+            toc.get_text(
+                " ",
+                strip=True,
+            )
+        ) != new_toc_text
     ):
         toc.string = new_toc_text
         changed = True
 
     # -----------------------------------------------------
-    # 3. Update summary table
+    # 6. Only update answers when MiningCombo
+    #    is on the current campaign
     # -----------------------------------------------------
 
-    if update_wotd_table(soup, groups):
-        changed = True
+    if answers_ready:
+
+        # Summary table
+        if update_wotd_table(
+            soup,
+            groups,
+        ):
+            changed = True
+
+        # Detailed UL answers
+        for length in range(3, 9):
+            h3_id = (
+                "binance-word-of-the-day-"
+                f"{length}-letter-answers"
+            )
+
+            h3 = soup.find(
+                "h3",
+                id=h3_id,
+            )
+
+            if not h3:
+                raise RuntimeError(
+                    "WOTD heading not found: "
+                    f"#{h3_id}"
+                )
+
+            ul = find_ul_after_heading(h3)
+
+            if not ul:
+                raise RuntimeError(
+                    "WOTD UL not found after "
+                    f"#{h3_id}"
+                )
+
+            new_answers = groups.get(
+                str(length),
+                [],
+            ) or ["Updating soon."]
+
+            old_answers = [
+                clean(
+                    li.get_text(
+                        " ",
+                        strip=True,
+                    )
+                )
+                for li in ul.find_all(
+                    "li",
+                    recursive=False,
+                )
+            ]
+
+            if old_answers == new_answers:
+                continue
+
+            ul.clear()
+
+            for answer in new_answers:
+                li = soup.new_tag("li")
+                li.string = answer
+                ul.append(li)
+
+            changed = True
 
     # -----------------------------------------------------
-    # 4. Update detailed answer ULs
+    # 7. Logging when source is still old
     # -----------------------------------------------------
 
-    for length in range(3, 9):
-        h3_id = (
-            f"binance-word-of-the-day-"
-            f"{length}-letter-answers"
+    elif not campaign_ready:
+        print(
+            "WOTD: MiningCombo campaign not ready yet. "
+            f"Expected {expected_start} to {expected_end}, "
+            f"got {start} to {end}. "
+            "Refreshing date only."
         )
 
-        h3 = soup.find("h3", id=h3_id)
-
-        if not h3:
-            raise RuntimeError(
-                f"WOTD heading not found: #{h3_id}"
-            )
-
-        ul = find_ul_after_heading(h3)
-
-        if not ul:
-            raise RuntimeError(
-                f"WOTD UL not found after #{h3_id}"
-            )
-
-        new_answers = groups.get(
-            str(length),
-            [],
-        ) or ["Updating soon."]
-
-        old_answers = [
-            clean(li.get_text(" ", strip=True))
-            for li in ul.find_all(
-                "li",
-                recursive=False,
-            )
-        ]
-
-        if old_answers == new_answers:
-            continue
-
-        ul.clear()
-
-        for answer in new_answers:
-            li = soup.new_tag("li")
-            li.string = answer
-            ul.append(li)
-
-        changed = True
+    else:
+        print(
+            "WOTD: current campaign detected, "
+            "but no answers yet. "
+            "Refreshing date/meta only."
+        )
 
     # -----------------------------------------------------
-    # 5. Save only when something changed
+    # 8. Save
     # -----------------------------------------------------
 
     if not changed:
@@ -530,10 +712,18 @@ def update_wotd():
         str(soup),
     )
 
-    print(
-        f"WOTD updated: {date} | "
-        f"{start} to {end}"
-    )
+    if answers_ready:
+        print(
+            f"WOTD updated: {date} | "
+            f"{expected_start} to {expected_end} | "
+            "answers updated."
+        )
+    else:
+        print(
+            f"WOTD refreshed: {date} | "
+            f"{expected_start} to {expected_end} | "
+            "waiting for new answers."
+        )
 
 
 # =========================================================
