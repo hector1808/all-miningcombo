@@ -885,7 +885,7 @@ def main():
         return
 
     tasks = [
-        ("Dropee", update_dropee),
+        # ("Dropee", update_dropee),
         ("Binance WOTD", update_wotd),
         ("Binance Red Packet", update_red_packet),
     ]
