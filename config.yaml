@@ -6,7 +6,7 @@ wp:
   app_password_env: "WP_APP_PASSWORD"
   author_id: 159
   language: "en"
-  category_ids: [4687]
+  category_ids: [16873]
   # status: "publish"
 
 google_sheet:
@@ -79,7 +79,7 @@ games:
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/18133"
     template_file: "games/spur-protocol.txt"
     featured_media_id: 337753
-    category_ids: [7]
+    # category_ids: [7]
 
     check_answer: "C) Previous block hash."
     answer_heading_contains: "Spur Protocol Quiz Answers Today"
@@ -124,7 +124,7 @@ games:
     meta_description_format: "Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how SURF Coins and the BAY token actually work right now, and claim your reward before the reset."
 
   - game_key: "dropee_question"
-    enabled: false
+    enabled: true
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/6939"
     template_file: "games/dropee-question.txt"
     featured_media_id: 338223
