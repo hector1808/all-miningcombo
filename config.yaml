@@ -293,7 +293,7 @@ games:
     question_selector: "p.wp-block-paragraph"
     answer_selector: "p.wp-block-paragraph"
   
-    question_prefix: "Questions:"
+    question_prefix: "Question"
     answer_prefix: "Answer:"
   
     answer_heading_contains: "KieDex Daily Quiz Answer Today"
