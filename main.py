@@ -265,6 +265,73 @@ def format_date_range_slug(start_date, end_date):
         f"{end_date.year}"
     )
 
+def make_city_combo_signature(combo_lines):
+    if not combo_lines:
+        return ""
+
+    raw = json.dumps(
+        combo_lines,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+    return hashlib.sha256(
+        raw.encode("utf-8")
+    ).hexdigest()
+
+
+def get_latest_city_combo_signature(
+    ws,
+    game_key,
+    exclude_target_date=None,
+):
+    records = ws.get_all_records()
+
+    for row in reversed(records):
+        if str(
+            row.get("game_key")
+        ) != game_key:
+            continue
+
+        if (
+            exclude_target_date
+            and str(row.get("target_date"))
+            == exclude_target_date
+        ):
+            continue
+
+        raw_answer = str(
+            row.get("answer")
+            or ""
+        ).strip()
+
+        if not raw_answer:
+            continue
+
+        try:
+            payload = json.loads(
+                raw_answer
+            )
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            continue
+
+        combo_lines = payload.get(
+            "combo_lines",
+            [],
+        )
+
+        signature = make_city_combo_signature(
+            combo_lines
+        )
+
+        if signature:
+            return signature
+
+    return ""
+
 
 def get_latest_check_answer_for_game(ws, game_key):
     records = ws.get_all_records()
@@ -1097,7 +1164,135 @@ def is_waiting_content(lines):
         for phrase in waiting_phrases
     )
 
+def extract_city_quiz_date(soup):
+    for h2 in soup.find_all("h2"):
+        heading = normalize_answer(
+            h2.get_text(" ", strip=True)
+        ).lower()
 
+        if heading != "city holder daily quiz answer":
+            continue
+
+        for sibling in h2.next_siblings:
+            tag = getattr(sibling, "name", None)
+
+            if tag == "h2":
+                break
+
+            if tag != "p":
+                continue
+
+            text = html.unescape(
+                sibling.get_text(" ", strip=True)
+            )
+
+            match = re.search(
+                r"\bDate\s*:\s*"
+                r"([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+                text,
+                flags=re.I,
+            )
+
+            if match:
+                try:
+                    return datetime.strptime(
+                        match.group(1),
+                        "%B %d, %Y",
+                    ).date()
+                except ValueError:
+                    return None
+
+    return None
+
+
+def extract_city_quiz_en(soup):
+    for h2 in soup.find_all("h2"):
+        heading = normalize_answer(
+            h2.get_text(" ", strip=True)
+        ).lower()
+
+        if heading != "city holder daily quiz answer":
+            continue
+
+        for sibling in h2.next_siblings:
+            tag = getattr(sibling, "name", None)
+
+            if tag == "h2":
+                break
+
+            if tag != "p":
+                continue
+
+            raw_text = html.unescape(
+                sibling.get_text(
+                    "\n",
+                    strip=True,
+                )
+            )
+
+            answers = []
+
+            for line in raw_text.splitlines():
+                match = re.match(
+                    r"^\s*\d+\.\s*(.+?)\s*$",
+                    line,
+                )
+
+                if match:
+                    answer = normalize_answer(
+                        match.group(1)
+                    )
+
+                    if answer:
+                        answers.append(answer)
+
+            if answers:
+                return answers
+
+    return []
+
+
+def extract_city_quiz_ru(soup):
+    for h2 in soup.find_all("h2"):
+        heading = normalize_answer(
+            h2.get_text(" ", strip=True)
+        ).lower()
+
+        if (
+            "city holder daily quiz answer for russia"
+            not in heading
+        ):
+            continue
+
+        for sibling in h2.next_siblings:
+            tag = getattr(sibling, "name", None)
+
+            if tag == "h2":
+                break
+
+            if tag == "ol":
+                return [
+                    normalize_answer(
+                        li.get_text(
+                            " ",
+                            strip=True,
+                        )
+                    )
+                    for li in sibling.find_all(
+                        "li",
+                        recursive=False,
+                    )
+                    if normalize_answer(
+                        li.get_text(
+                            " ",
+                            strip=True,
+                        )
+                    )
+                ]
+
+    return []
+
+        
 def extract_city_holder_data(content_html):
     soup = BeautifulSoup(
         content_html,
@@ -1105,8 +1300,9 @@ def extract_city_holder_data(content_html):
     )
 
     # =====================================================
-    # 1. Combo
+    # 1. COMBO
     # =====================================================
+
     combo_pre = find_pre_after_heading(
         soup,
         lambda text: (
@@ -1123,45 +1319,32 @@ def extract_city_holder_data(content_html):
         combo_lines = []
 
     # =====================================================
-    # 2. Quiz English
+    # 2. QUIZ
     # =====================================================
-    quiz_en_pre = find_pre_after_heading(
-        soup,
-        lambda text: (
-            text.strip()
-            == "city holder daily quiz answer"
-        ),
+
+    quiz_date = extract_city_quiz_date(
+        soup
     )
 
-    quiz_en_lines = extract_pre_lines(
-        quiz_en_pre
+    quiz_en = extract_city_quiz_en(
+        soup
     )
 
-    quiz_en = extract_numbered_answers(
-        quiz_en_lines
+    quiz_ru = extract_city_quiz_ru(
+        soup
     )
 
-    # =====================================================
-    # 3. Quiz Russia
-    # =====================================================
-    quiz_ru_pre = find_pre_after_heading(
-        soup,
-        lambda text: (
-            "city holder daily quiz answer for russia"
-            in text
-        ),
-    )
-
-    quiz_ru_lines = extract_pre_lines(
-        quiz_ru_pre
-    )
-
-    quiz_ru = extract_numbered_answers(
-        quiz_ru_lines
+    print(
+        "City Holder parsed: "
+        f"combo={len(combo_lines)}, "
+        f"quiz_date={quiz_date}, "
+        f"quiz_en={len(quiz_en)}, "
+        f"quiz_ru={len(quiz_ru)}"
     )
 
     return {
         "combo_lines": combo_lines,
+        "quiz_date": quiz_date,
         "quiz_en": quiz_en,
         "quiz_ru": quiz_ru,
     }
@@ -1219,6 +1402,10 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             [],
         )
 
+        quiz_date = city_data.get(
+            "quiz_date"
+        )
+
         quiz_en = city_data.get(
             "quiz_en",
             [],
@@ -1231,14 +1418,29 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
 
         answer_payload = {
             "combo_lines": combo_lines,
+
+            "quiz_date": (
+                quiz_date.isoformat()
+                if quiz_date
+                else ""
+            ),
+
             "quiz_en": quiz_en,
             "quiz_ru": quiz_ru,
         }
 
-        has_data = bool(
+        has_combo = bool(
             combo_lines
-            or quiz_en
+        )
+
+        has_quiz = bool(
+            quiz_en
             or quiz_ru
+        )
+
+        has_data = bool(
+            has_combo
+            or has_quiz
         )
 
         answer_json = json.dumps(
@@ -1255,22 +1457,52 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
         else:
             check_value = ""
 
+        # Signature riêng cho Combo.
+        # Dùng để phân biệt Combo mới/cũ,
+        # không bị Quiz làm ảnh hưởng.
+        combo_json = json.dumps(
+            combo_lines,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+        combo_check_value = (
+            hashlib.sha256(
+                combo_json.encode("utf-8")
+            ).hexdigest()
+            if combo_lines
+            else ""
+        )
+
         return {
             "answer_type": "city_holder",
 
-            # Dữ liệu chung cho Google Sheet.
             "question": "",
+
             "answer": (
                 answer_json
                 if has_data
                 else ""
             ),
+
             "check_value": check_value,
 
-            # Dữ liệu render.
+            "combo_check_value": (
+                combo_check_value
+            ),
+
             "combo_lines": combo_lines,
+
+            "quiz_date": quiz_date,
+
             "quiz_en": quiz_en,
+
             "quiz_ru": quiz_ru,
+
+            "has_combo": has_combo,
+
+            "has_quiz": has_quiz,
+
             "has_data": has_data,
         }
 
@@ -3007,10 +3239,10 @@ def has_publishable_answer(answer_data):
     )
 
     if answer_type == "city_holder":
-        # Phương án A: chỉ cần có một phần dữ liệu thật
-        # (Combo, Quiz EN hoặc Quiz RU) là có thể publish.
+        # Chỉ Combo được phép quyết định publish.
+        # Quiz EN/RU không phải tín hiệu publish.
         return bool(
-            answer_data.get("has_data")
+            answer_data.get("combo_lines")
         )
 
     if answer_type in {
@@ -4220,31 +4452,68 @@ def process_game(cfg, ws, game_cfg):
         == "city_holder"
         and day_difference != 0
     ):
-        sheet_source_modified = str(
-            row.get("source_modified")
-            or ""
-        ).strip()
-
-        source_modified_changed = (
-            str(source_modified).strip()
-            != sheet_source_modified
+        current_combo_check = (
+            answer_data.get(
+                "combo_check_value",
+                "",
+            )
         )
 
-        if (
-            not answer_changed
-            and not source_modified_changed
-        ):
+        previous_combo_check = (
+            get_latest_city_combo_signature(
+                ws=ws,
+                game_key=game_key,
+                exclude_target_date=date_str,
+            )
+        )
+
+        # Với source lệch +/-1 ngày,
+        # chỉ Combo mới được coi là tín hiệu mới.
+        combo_changed = bool(
+            current_combo_check
+            and previous_combo_check
+            and current_combo_check
+            != previous_combo_check
+        )
+
+        print(
+            "City Holder current combo signature: "
+            f"{current_combo_check}"
+        )
+
+        print(
+            "City Holder previous combo signature: "
+            f"{previous_combo_check}"
+        )
+
+        print(
+            "City Holder combo changed: "
+            f"{combo_changed}"
+        )
+
+        if not combo_changed:
             print(
                 "City Holder source is within +/-1 day "
-                "but no new data signal was detected. "
+                "but Combo has not changed. "
+                "Quiz data is ignored for publish detection. "
                 "Keep post as draft."
             )
-            update_log_row(ws, row_idx, {
-                "source_modified": source_modified,
-                "status": "checked_city_holder_draft_no_new_data",
-                "updated_at": timestamp,
-            })
+
+            update_log_row(
+                ws,
+                row_idx,
+                {
+                    "source_modified": source_modified,
+                    "status": (
+                        "checked_city_holder_draft_"
+                        "no_new_combo"
+                    ),
+                    "updated_at": timestamp,
+                },
+            )
+
             return
+
 
     if not answer_changed and not row_is_waiting:
         print("Answer unchanged. No post update needed.")
