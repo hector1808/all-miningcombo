@@ -1226,7 +1226,6 @@ def extract_city_quiz_date(soup):
 
     return None
 
-
 def extract_city_quiz_en(soup):
     for h2 in soup.find_all("h2"):
         heading = normalize_answer(
@@ -1242,37 +1241,53 @@ def extract_city_quiz_en(soup):
             if tag == "h2":
                 break
 
-            if tag != "p":
-                continue
+            # Trường hợp source dùng <ol><li>
+            if tag == "ol":
+                answers = [
+                    normalize_answer(
+                        li.get_text(" ", strip=True)
+                    )
+                    for li in sibling.find_all(
+                        "li",
+                        recursive=False,
+                    )
+                    if normalize_answer(
+                        li.get_text(" ", strip=True)
+                    )
+                ]
 
-            raw_text = html.unescape(
-                sibling.get_text(
-                    "\n",
-                    strip=True,
+                if answers:
+                    return answers
+
+            # Trường hợp source dùng <p> + <br>
+            if tag == "p":
+                raw = html.unescape(
+                    sibling.get_text(
+                        "\n",
+                        strip=True,
+                    )
                 )
-            )
 
-            answers = []
+                answers = []
 
-            for line in raw_text.splitlines():
-                match = re.match(
-                    r"^\s*\d+\.\s*(.+?)\s*$",
-                    line,
-                )
-
-                if match:
-                    answer = normalize_answer(
-                        match.group(1)
+                for line in raw.splitlines():
+                    match = re.match(
+                        r"^\s*\d+\s*[.)-]?\s+(.+?)\s*$",
+                        line,
                     )
 
-                    if answer:
-                        answers.append(answer)
+                    if match:
+                        answer = normalize_answer(
+                            match.group(1)
+                        )
 
-            if answers:
-                return answers
+                        if answer:
+                            answers.append(answer)
+
+                if answers:
+                    return answers
 
     return []
-
 
 def extract_city_quiz_ru(soup):
     for h2 in soup.find_all("h2"):
