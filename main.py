@@ -1073,6 +1073,28 @@ def extract_money_bux_codes(content_html):
         )
     ]
 
+def find_city_combo_element(soup):
+    for h2 in soup.find_all("h2"):
+        heading = html.unescape(
+            h2.get_text(" ", strip=True)
+        ).lower()
+
+        if "city holder daily combo" not in heading:
+            continue
+
+        for sibling in h2.next_siblings:
+            tag = getattr(sibling, "name", None)
+
+            # Hỗ trợ cả format cũ và mới
+            if tag in {"pre", "ol"}:
+                return sibling
+
+            # Không tìm tràn sang section kế tiếp
+            if tag == "h2":
+                break
+
+    return None
+
 def find_pre_after_heading(
     soup,
     heading_match,
@@ -1303,18 +1325,33 @@ def extract_city_holder_data(content_html):
     # 1. COMBO
     # =====================================================
 
-    combo_pre = find_pre_after_heading(
-        soup,
-        lambda text: (
-            "city holder daily combo"
-            in text
-        ),
+    combo_element = find_city_combo_element(
+        soup
     )
-
-    combo_lines = extract_pre_lines(
-        combo_pre
-    )
-
+    
+    combo_lines = []
+    
+    if combo_element:
+        if combo_element.name == "pre":
+            # Format cũ
+            combo_lines = extract_pre_lines(
+                combo_element
+            )
+    
+        elif combo_element.name == "ol":
+            # Format mới
+            combo_lines = [
+                f"{i}. {html.unescape(li.get_text(' ', strip=True))}"
+                for i, li in enumerate(
+                    combo_element.find_all(
+                        "li",
+                        recursive=False,
+                    ),
+                    start=1,
+                )
+                if li.get_text(" ", strip=True)
+            ]
+    
     if is_waiting_content(combo_lines):
         combo_lines = []
 
