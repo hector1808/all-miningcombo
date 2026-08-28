@@ -308,7 +308,7 @@ games:
     post_cycle: "daily"
   
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/44277"
-  
+    featured_media_id: 341850
     answer_type: "question_answer"
   
     # Chỉ parse trong section này.
@@ -356,7 +356,7 @@ games:
     post_cycle: "daily"
   
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/52079"
-  
+    featured_media_id: 341851
     answer_type: "question_answer"
   
     source_heading_contains: "ticktom daily combo"
