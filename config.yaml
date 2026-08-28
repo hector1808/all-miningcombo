@@ -1,410 +1,286 @@
-timezone: "Asia/Ho_Chi_Minh"
-
+timezone: Asia/Ho_Chi_Minh
+# Global default: create tomorrow's post now, then publish at 22:00 today.
+# Per-game overrides supported:
+#   publish_mode: answer
+# or:
+#   publish_mode: scheduled
+#   publish_time: '00:30'
+#   publish_day_offset: 0
+publishing:
+  default_mode: scheduled
+  default_time: '22:00'
+  default_day_offset: -1
 wp:
-  site_url: "https://blog.mexc.com"
-  username_env: "WP_USERNAME"
-  app_password_env: "WP_APP_PASSWORD"
+  site_url: https://blog.mexc.com
+  username_env: WP_USERNAME
+  app_password_env: WP_APP_PASSWORD
   author_id: 159
-  language: "en"
-  category_ids: [16873]
-  # status: "publish"
-
+  language: en
+  category_ids:
+  - 16873
 google_sheet:
-  sheet_id_env: "GOOGLE_SHEET_ID"
-  worksheet_name: "miningcombo_logs"
-
+  sheet_id_env: GOOGLE_SHEET_ID
+  worksheet_name: miningcombo_logs
 openai:
-  model: "gpt-5-nano"
-
+  model: gpt-5-nano
 defaults:
-  question_selector: "p.has-text-align-left.wp-block-paragraph"
-  answer_selector: "p.has-text-align-left.wp-block-paragraph"
-  question_prefix: "Question:"
-  answer_prefix: "Answer:"
-
+  question_selector: p.has-text-align-left.wp-block-paragraph
+  answer_selector: p.has-text-align-left.wp-block-paragraph
+  question_prefix: 'Question:'
+  answer_prefix: 'Answer:'
 crypto_snapshot:
-  coingecko_url: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&price_change_percentage=24h"
-  required_phrases:
-    - "Bitcoin price"
-    - "BTC/USDT"
-    - "Ethereum price"
-    - "ETH/USDT"
-
+  coingecko_url: https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum&price_change_percentage=24h
 auto_links:
-  "Bitcoin price": "https://www.mexc.com/price/BTC"
-  "Bitcoin price prediction": "https://www.mexc.com/price-prediction/BTC"
-  "Ethereum price": "https://www.mexc.com/price/ETH"
-  "Ethereum price prediction": "https://www.mexc.com/price-prediction/ETH"
-  "BTC/USDT": "https://www.mexc.com/exchange/BTC_USDT"
-  "ETH/USDT": "https://www.mexc.com/exchange/ETH_USDT"
-
+  Bitcoin price: https://www.mexc.com/price/BTC
+  Bitcoin price prediction: https://www.mexc.com/price-prediction/BTC
+  Ethereum price: https://www.mexc.com/price/ETH
+  Ethereum price prediction: https://www.mexc.com/price-prediction/ETH
+  BTC/USDT: https://www.mexc.com/exchange/BTC_USDT
+  ETH/USDT: https://www.mexc.com/exchange/ETH_USDT
 tag_rules:
-  - url_contains: "spur-protocol-quiz-answer-today"
-    tag_ids:
-      - 16824
-  - url_contains: "syntax-verse-quiz"
-    tag_ids:
-      - 16826
-  - url_contains: "marina-protocol-today-answer"
-    tag_ids:
-      - 16828
-  - url_contains: "dropee-question-of-the-day-answer-today"
-    tag_ids:
-      - 16822
-  - url_contains: "today-hamster-kombat-daily-cipher-code"
-    tag_ids:
-      - 16818
-  - url_contains: "hrum-quote-of-the-day"
-    tag_ids:
-      - 16832
-  - url_contains: "binance-red-packet-code-today"
-    tag_ids:
-      - 16834
-  - url_contains: "city-holder-daily-combo-quiz-answers-today"
-    tag_ids:
-      - 16836
-  - url_contains: "money-bux-daily-promo-code"
-    tag_ids:
-      - 16838
-  - url_contains: "kiedex-daily-quiz-answer-today"
-    tag_ids:
-      - 16840
-  - url_contains: "binance-word-of-the-day-answer"
-    tag_ids:
-      - 16830
-      
+- url_contains: spur-protocol-quiz-answer-today
+  tag_ids:
+  - 16824
+- url_contains: syntax-verse-quiz
+  tag_ids:
+  - 16826
+- url_contains: marina-protocol-today-answer
+  tag_ids:
+  - 16828
+- url_contains: dropee-question-of-the-day-answer-today
+  tag_ids:
+  - 16822
+- url_contains: today-hamster-kombat-daily-cipher-code
+  tag_ids:
+  - 16818
+- url_contains: hrum-quote-of-the-day
+  tag_ids:
+  - 16832
+- url_contains: city-holder-daily-combo-quiz-answers-today
+  tag_ids:
+  - 16836
+- url_contains: money-bux-daily-promo-code
+  tag_ids:
+  - 16838
+- url_contains: kiedex-daily-quiz-answer-today
+  tag_ids:
+  - 16840
+- url_contains: fomo-fighters-riddle-of-the-day-answer
+  tag_ids:
+  - 16888
+- url_contains: ticktom-daily-combo-today
+  tag_ids:
+  - 16886
+  
 games:
-  - game_key: "spur_protocol"
-    enabled: true
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/18133"
-    template_file: "games/spur-protocol.txt"
-    featured_media_id: 337753
+- game_key: spur_protocol
+  enabled: true
+  publish_time: '01:00'
+  publish_day_offset: 0
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/18133
+  template_file: games/spur-protocol.txt
+  featured_media_id: 337753
+  check_answer: C) Previous block hash.
+  answer_heading_contains: Spur Protocol Quiz Answers Today
+  title_format: Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}
+  slug_format: spur-protocol-quiz-answer-today-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}
+  meta_description_format: Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works,
+    how to participate, earn rewards, and track today’s crypto market update.
 
-    check_answer: "C) Previous block hash."
-    answer_heading_contains: "Spur Protocol Quiz Answers Today"
-    snapshot_heading_prefix: "Today’s Crypto Market Update"
+- game_key: syntax_verse
+  question_prefix: 'Quiz:'
+  enabled: true
+  publish_time: '01:00'
+  publish_day_offset: 0
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/22199
+  template_file: games/syntax-verse.txt
+  featured_media_id: 338210
+  check_answer: B) Consistency can compound knowledge and platform progression over time.
+  answer_heading_contains: Syntax Verse Daily Quiz Answer
+  title_format: Today’s Syntax Verse Quiz Answers ({{CURRENT_DATE_READABLE}})
+  slug_format: syntax-verse-quiz-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Syntax Verse Quiz Today ({{CURRENT_DATE_READABLE}}) - Daily Answer Updated
+  meta_description_format: Syntax Verse quiz today's correct answer, updated daily. Solve it inside the app and earn free
+    $SYNTAX tokens in under a minute.
 
-    title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
-    slug_format: "spur-protocol-quiz-answer-today-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Spur Protocol Quiz Answers Today - {{CURRENT_DATE_READABLE}}"
-    meta_description_format: "Today’s Spur Protocol quiz answer for {{CURRENT_DATE_READABLE}}. Learn how Spur Protocol works, how to participate, earn rewards, and track today’s crypto market update."
+- game_key: marina_protocol
+  enabled: true
+  publish_time: '01:00'
+  publish_day_offset: 0
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/9711
+  template_file: games/marina-protocol.txt
+  featured_media_id: 338222
+  question_selector: p.wp-block-paragraph
+  answer_selector: p.wp-block-paragraph
+  check_answer: A) Legal enforceability.
+  answer_heading_contains: Marina Protocol Today Quiz Answer
+  title_format: Marina Protocol Today Answer For {{CURRENT_DATE_READABLE}}
+  slug_format: marina-protocol-today-answer-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Marina Protocol Today Answer ({{CURRENT_DATE_READABLE}}) – Daily Quiz Updated
+  meta_description_format: Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how
+    SURF Coins and the BAY token actually work right now, and claim your reward before the reset.
 
-  - game_key: "syntax_verse"
-    question_prefix: "Quiz:"
-    enabled: true
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/22199"
-    template_file: "games/syntax-verse.txt"
-    featured_media_id: 338210
+- game_key: dropee_question
+  publish_time: '01:00'
+  publish_day_offset: 0
+  enabled: true
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/6939
+  template_file: games/dropee-question.txt
+  featured_media_id: 338223
+  question_selector: p.wp-block-paragraph
+  answer_selector: p.wp-block-paragraph
+  question_prefix: Question
+  answer_prefix: Answer
+  check_answer: Shut Down
+  answer_heading_contains: Dropee Question of the Day Answer For
+  title_format: Dropee Question of the Day Answer Today – {{CURRENT_DATE_READABLE}}
+  slug_format: dropee-question-of-the-day-answer-today-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Dropee Question of the Day Answer Today ({{CURRENT_DATE_READABLE}})
+  meta_description_format: Dropee Question of the Day answer today, updated daily. Copy the correct answer, paste it into
+    Dropee Bot, and claim free $DROPEE tokens in seconds.
 
-    check_answer: "B) Consistency can compound knowledge and platform progression over time."
-    answer_heading_contains: "Syntax Verse Daily Quiz Answer"
-    snapshot_heading_prefix: "Today Crypto Market Snapshot"
+- game_key: hamster_cipher
+  answer_type: hamster_cipher
+  publish_time: '13:00'
+  publish_day_offset: 0
+  enabled: true
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/3119
+  template_file: games/hamster-cipher.txt
+  featured_media_id: 338324
+  word_selector: p.wp-block-paragraph
+  word_prefix: Word
+  simplified_label_selector: p.wp-block-paragraph
+  simplified_prefix: Simplified
+  answer_placeholder: '{{ANSWER_AREA}}'
+  answer_area_id: answer-area
+  check_answer: DUST
+  title_format: Today’s Hamster Kombat Daily Cipher Code for {{CURRENT_DATE_READABLE}}
+  slug_format: today-hamster-kombat-daily-cipher-code-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Hamster Kombat Daily Cipher Code Today, {{CURRENT_DATE_READABLE}}
+  meta_description_format: Unlock Hamster Kombat Daily Cipher code for {{CURRENT_DATE_READABLE}}, and earn 1,000,000 free
+    Hamster Coins. Learn how to enter Morse code in-game and trade HMSTR tokens on MEXC for real crypto gains.
 
-    title_format: "Today’s Syntax Verse Quiz Answers ({{CURRENT_DATE_READABLE}})"
-    slug_format: "syntax-verse-quiz-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Syntax Verse Quiz Today ({{CURRENT_DATE_READABLE}}) - Daily Answer Updated"
-    meta_description_format: "Syntax Verse quiz today's correct answer, updated daily. Solve it inside the app and earn free $SYNTAX tokens in under a minute."
+- game_key: hrum_quote
+  enabled: true
+  publish_time: '15:00'
+  publish_day_offset: -1
+  answer_type: quote_author
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/3158
+  template_file: games/hrum-quote.txt
+  featured_media_id: 338383
+  answer_placeholder: '{{ANSWER_AREA}}'
+  answer_area_id: answer-area
+  title_format: Hrum Quote of the Day Today Answer for {{CURRENT_DATE_READABLE}}
+  slug_format: ' hrum-quote-of-the-day-{{CURRENT_DATE_SLUG}}'
+  seo_title_format: Hrum Quote of the Day Answer ({{CURRENT_DATE_READABLE}}) – Today's Author Name
+  meta_description_format: Hrum Quote of the Day answer, updated daily. Get today's quote author name, claim +150 $HRUM in
+    Hrum Bot, and see what's moving in crypto today.
 
-  - game_key: "marina_protocol"
-    enabled: true
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/9711"
-    template_file: "games/marina-protocol.txt"
-    featured_media_id: 338222
-    question_selector: "p.wp-block-paragraph"
-    answer_selector: "p.wp-block-paragraph"
+- game_key: city_holder
+  enabled: true
+  publish_time: '15:00'
+  publish_day_offset: -1
+  answer_type: city_holder
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/7641
+  template_file: games/city-holder.txt
+  featured_media_id: 338431
+  answer_placeholder: '{{ANSWER_AREA}}'
+  answer_area_id: answer-area
+  title_format: City Holder Daily Combo & Quiz Answers for {{CURRENT_DATE_READABLE}}
+  slug_format: city-holder-daily-combo-quiz-answers-today-{{CURRENT_DATE_SLUG}}
+  seo_title_format: City Holder Daily Combo & Quiz Answers Today for {{CURRENT_DATE_READABLE}}
+  meta_description_format: Get today's City Holder Daily Combo & Quiz answers to claim up to 7.5 million in-game coins. Step-by-step
+    guide, tips, and rewards explained.
+  source_date_tolerance_days: 1
+  
+- game_key: money_bux
+  enabled: true
+  publish_time: '07:00'
+  publish_day_offset: 0
+  answer_type: money_bux_codes
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/16978
+  template_file: games/money-bux.txt
+  featured_media_id: 340270
+  answer_placeholder: '{{ANSWER_AREA}}'
+  answer_area_id: answer-area
+  title_format: Get Money Bux Daily Promo Code Today – {{CURRENT_DATE_READABLE}}
+  slug_format: money-bux-daily-promo-code-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Get Money Bux Daily Promo Code Today - {{CURRENT_DATE_READABLE}}
+  meta_description_format: Find today's Money Bux Daily Promo Code, learn how to redeem it, earn daily rewards, and discover
+    other ways to maximize your earnings in the Money Bux Telegram mini app.
 
-    check_answer: "A) Legal enforceability."
-    answer_heading_contains: "Marina Protocol Today Quiz Answer"
-    snapshot_heading_prefix: "Crypto Market Snapshot"
+- game_key: kiedex_daily_quiz
+  enabled: true
+  publish_time: '07:00'
+  publish_day_offset: 0
+  answer_type: question_answer
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/56812
+  template_file: games/kiedex-daily-quiz.txt
+  featured_media_id: 340269
+  question_selector: p.wp-block-paragraph
+  answer_selector: p.wp-block-paragraph
+  question_prefix: Question
+  answer_prefix: 'Answer:'
+  answer_heading_contains: KieDex Daily Quiz Answer Today
+  title_format: Today’s KieDex Daily Quiz Answer for {{CURRENT_DATE_READABLE}}
+  slug_format: kiedex-daily-quiz-answer-today-{{CURRENT_DATE_SLUG}}
+  seo_title_format: KieDex Daily Quiz Answer Today – {{CURRENT_DATE_READABLE}}
+  meta_description_format: 'KieDex Daily Quiz Answer today, updated daily. Get the correct answer, submit it in the app, protect
+    your KDX Points streak, and see what''s moving in crypto today. '
 
-    title_format: "Marina Protocol Today Answer For {{CURRENT_DATE_READABLE}}"
-    slug_format: "marina-protocol-today-answer-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Marina Protocol Today Answer ({{CURRENT_DATE_READABLE}}) – Daily Quiz Updated"
-    meta_description_format: "Marina Protocol today answer for {{CURRENT_DATE_READABLE}}. Get today's quiz answer, learn how SURF Coins and the BAY token actually work right now, and claim your reward before the reset."
+- game_key: fomo_fighters
+  enabled: true
+  publish_time: '15:00'
+  publish_day_offset: -1
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/44277
+  featured_media_id: 341850
+  answer_type: question_answer
+  source_heading_contains: fomo fighters daily riddle
+  use_content_date: true
+  source_date_selector: p
+  source_date_prefix: Date
+  question_selector: p
+  question_prefix: ''
+  question_exclude_prefixes:
+  - Date
+  - Answer
+  answer_selector: p
+  answer_prefix: Answer
+  question_label: 'Riddle:'
+  answer_label: 'Answer:'
+  answer_heading_contains: Today's Fomo Fighters Riddle of the Day Answer
+  template_file: games/fomo_fighters.txt
+  title_format: Fomo Fighters Riddle of the Day Answer Today – {{CURRENT_DATE_READABLE}}
+  slug_format: fomo-fighters-riddle-of-the-day-answer-{{CURRENT_DATE_SLUG}}
+  seo_title_format: Fomo Fighters Riddle of the Day Today ({{CURRENT_DATE_READABLE}}) – Daily Answer
+  meta_description_format: Fomo Fighters Riddle of the Day answer today, updated daily. Find the correct answer, claim your
+    Red Game Diamonds, and check the latest game updates.
 
-  - game_key: "dropee_question"
-    enabled: true
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/6939"
-    template_file: "games/dropee-question.txt"
-    featured_media_id: 338223
-    question_selector: "p.wp-block-paragraph"
-    answer_selector: "p.wp-block-paragraph"
-    question_prefix: "Question"
-    answer_prefix: "Answer"
+- game_key: ticktom_daily_combo
+  enabled: true
+  publish_time: '02:00'
+  publish_day_offset: 0
+  source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/52079
+  featured_media_id: 341851
+  answer_type: question_answer
+  source_heading_contains: ticktom daily combo
+  use_content_date: true
+  source_date_selector: p
+  source_date_prefix: Date
+  question_selector: p
+  question_prefix: Date
+  answer_selector: ol
+  answer_prefix: ''
+  answer_text_separator: '
 
-    check_answer: "Shut Down"
-    answer_heading_contains: "Dropee Question of the Day Answer For"
-    snapshot_heading_prefix: "Today's Crypto Market Overview"
-
-    title_format: "Dropee Question of the Day Answer Today – {{CURRENT_DATE_READABLE}}"
-    slug_format: "dropee-question-of-the-day-answer-today-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Dropee Question of the Day Answer Today ({{CURRENT_DATE_READABLE}})"
-    meta_description_format: "Dropee Question of the Day answer today, updated daily. Copy the correct answer, paste it into Dropee Bot, and claim free $DROPEE tokens in seconds."
-
-  - game_key: "hamster_cipher"
-    answer_type: "hamster_cipher"
-    enabled: true
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/3119"
-    template_file: "games/hamster-cipher.txt"
-    featured_media_id: 338324
-  
-    word_selector: "p.wp-block-paragraph"
-    word_prefix: "Word"
-  
-    simplified_label_selector: "p.wp-block-paragraph"
-    simplified_prefix: "Simplified"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    check_answer: "DUST"
-  
-    title_format: "Today’s Hamster Kombat Daily Cipher Code for {{CURRENT_DATE_READABLE}}"
-    slug_format: "today-hamster-kombat-daily-cipher-code-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "Hamster Kombat Daily Cipher Code Today, {{CURRENT_DATE_READABLE}}"
-    meta_description_format: "Unlock Hamster Kombat Daily Cipher code for {{CURRENT_DATE_READABLE}}, and earn 1,000,000 free Hamster Coins. Learn how to enter Morse code in-game and trade HMSTR tokens on MEXC for real crypto gains."
-
-  - game_key: "binance_wotd"
-    answer_type: "binance_wotd"
-    post_cycle: "weekly"
-    enabled: false
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/25514"
-    template_file: "games/binance-wotd.txt"
-    featured_media_id: 338326
-  
-    # publish_time: "22:00"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    title_format: "Binance Word of the Day Answers Today - {{CAMPAIGN_DATE_READABLE}}"
-    slug_format: "binance-word-of-the-day-answer-{{CAMPAIGN_DATE_SLUG}}"
-    seo_title_format: "Binance Word of the Day Answers Today {{CAMPAIGN_DATE_READABLE}}"
-    meta_description_format: "Get Binance Word of the Day answers today for every letter length (3–8 letters). Updated daily so you never miss the BNB prize pool."
-    
-
-  - game_key: "hrum_quote"
-    enabled: true
-  
-    answer_type: "quote_author"
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/3158"
-    template_file: "games/hrum-quote.txt"
-    featured_media_id: 338383
-  
-    # publish_time: "22:00"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    title_format: "Hrum Quote of the Day Today Answer for {{CURRENT_DATE_READABLE}}"
-  
-    slug_format: " hrum-quote-of-the-day-{{CURRENT_DATE_SLUG}}"
-  
-    seo_title_format: "Hrum Quote of the Day Answer ({{CURRENT_DATE_READABLE}}) – Today's Author Name"
-  
-    meta_description_format: "Hrum Quote of the Day answer, updated daily. Get today's quote author name, claim +150 $HRUM in Hrum Bot, and see what's moving in crypto today."
-
-  
-  - game_key: "binance_red_packet"
-    enabled: false
-  
-    answer_type: "red_packet_codes"
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/26104"
-    template_file: "games/binance-red-packet.txt"
-    featured_media_id: 338385
-  
-    # publish_time: "22:00"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    title_format: "Binance Red Packet Code Today for {{CURRENT_DATE_READABLE}}: Earn Free BNB Now"
-  
-    slug_format: "binance-red-packet-code-today-for-{{CURRENT_DATE_SLUG}}-claim-free-bnb"
-  
-    seo_title_format: "Binance Red Packet Code Today for {{CURRENT_DATE_READABLE}}: Claim Free BNB Now"
-  
-    meta_description_format: "Get the Binance Red Packet code today, updated hourly. Claim free USDT, BTC, ETH, SOL, or BNB in seconds using a valid, unused code."
-
-  - game_key: "city_holder"
-    enabled: true
-  
-    answer_type: "city_holder"
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/7641"
-    template_file: "games/city-holder.txt"
-    featured_media_id: 338431
-  
-    # publish_time: "18:00"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    title_format: "City Holder Daily Combo & Quiz Answers for {{CURRENT_DATE_READABLE}}"
-  
-    slug_format: "city-holder-daily-combo-quiz-answers-today-{{CURRENT_DATE_SLUG}}"
-  
-    seo_title_format: "City Holder Daily Combo & Quiz Answers Today for {{CURRENT_DATE_READABLE}}"
-  
-    meta_description_format: "Get today's City Holder Daily Combo & Quiz answers to claim up to 7.5 million in-game coins. Step-by-step guide, tips, and rewards explained."
-
-  - game_key: "money_bux"
-    enabled: true
-  
-    answer_type: "money_bux_codes"
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/16978"
-    template_file: "games/money-bux.txt"
-  
-    featured_media_id: 340270
-  
-    # publish_time: "22:00"
-  
-    answer_placeholder: "{{ANSWER_AREA}}"
-    answer_area_id: "answer-area"
-  
-    title_format: "Get Money Bux Daily Promo Code Today – {{CURRENT_DATE_READABLE}}"
-  
-    slug_format: "money-bux-daily-promo-code-{{CURRENT_DATE_SLUG}}"
-  
-    seo_title_format: "Get Money Bux Daily Promo Code Today - {{CURRENT_DATE_READABLE}}"
-  
-    meta_description_format: "Find today's Money Bux Daily Promo Code, learn how to redeem it, earn daily rewards, and discover other ways to maximize your earnings in the Money Bux Telegram mini app."
-
-
-  - game_key: "kiedex_daily_quiz"
-    enabled: true
-
-    answer_type: "question_answer"
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/56812"
-    template_file: "games/kiedex-daily-quiz.txt"
-    featured_media_id: 340269
-  
-    # publish_time: "22:00"
-  
-    question_selector: "p.wp-block-paragraph"
-    answer_selector: "p.wp-block-paragraph"
-  
-    question_prefix: "Question"
-    answer_prefix: "Answer:"
-  
-    answer_heading_contains: "KieDex Daily Quiz Answer Today"
-  
-    title_format: "Today’s KieDex Daily Quiz Answer for {{CURRENT_DATE_READABLE}}"
-    slug_format: "kiedex-daily-quiz-answer-today-{{CURRENT_DATE_SLUG}}"
-    seo_title_format: "KieDex Daily Quiz Answer Today – {{CURRENT_DATE_READABLE}}"
-    meta_description_format: "KieDex Daily Quiz Answer today, updated daily. Get the correct answer, submit it in the app, protect your KDX Points streak, and see what's moving in crypto today. "
-
-  - game_key: "fomo_fighters"
-    enabled: true
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/44277"
-    featured_media_id: 341850
-    answer_type: "question_answer"
-  
-    # Chỉ parse trong section này.
-    # Match contains nên MiningCombo thêm chữ nhỏ vẫn không sao.
-    source_heading_contains: "fomo fighters daily riddle"
-  
-    # Date trong HTML là nguồn xác định ngày.
-    use_content_date: true
-    source_date_selector: "p"
-    source_date_prefix: "Date"
-  
-    # Riddle:
-    # tìm các paragraph trong đúng section,
-    # bỏ Date và Answer.
-    question_selector: "p"
-    question_prefix: ""
-    question_exclude_prefixes:
-      - "Date"
-      - "Answer"
-  
-    # Answer:
-    # không phụ thuộc span.copy-text.
-    # Chỉ cần paragraph vẫn có "Answer:"
-    answer_selector: "p"
-    answer_prefix: "Answer"
-  
-    question_label: "Riddle:"
-    answer_label: "Answer:"
-  
-    answer_heading_contains: "Today's Fomo Fighters Riddle of the Day Answer"
-  
-    template_file: "games/fomo_fighters.txt"
-  
-    title_format: "Fomo Fighters Riddle of the Day Answer Today – {{CURRENT_DATE_READABLE}}"
-  
-    slug_format: "fomo-fighters-riddle-of-the-day-answer-{{CURRENT_DATE_SLUG}}"
-  
-    seo_title_format: "Fomo Fighters Riddle of the Day Today ({{CURRENT_DATE_READABLE}}) – Daily Answer"
-  
-    meta_description_format: "Fomo Fighters Riddle of the Day answer today, updated daily. Find the correct answer, claim your Red Game Diamonds, and check the latest game updates."
-
-
-  - game_key: "ticktom_daily_combo"
-    enabled: true
-    post_cycle: "daily"
-  
-    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/52079"
-    featured_media_id: 341851
-    answer_type: "question_answer"
-  
-    source_heading_contains: "ticktom daily combo"
-  
-    use_content_date: true
-    source_date_selector: "p"
-    source_date_prefix: "Date"
-  
-    # Dùng Date làm field question.
-    question_selector: "p"
-    question_prefix: "Date"
-  
-    # Lấy nguyên OL.
-    # Không phụ thuộc class wp-block-list.
-    answer_selector: "ol"
-    answer_prefix: ""
-  
-    # Mỗi LI thành một dòng.
-    answer_text_separator: "\n"
-  
-    question_label: "Date:"
-    answer_label: "Today's Combo:"
-  
-    answer_heading_contains: "Today's TiCkTOM Daily Combo"
-  
-    template_file: "games/ticktom.txt"
-  
-    title_format: "TiCkTOM Daily Combo Today - {{CURRENT_DATE_READABLE}}"
-  
-    slug_format: "ticktom-daily-combo-today-{{CURRENT_DATE_SLUG}}"
-  
-    seo_title_format: "TiCkTOM Daily Combo Today ({{CURRENT_DATE_READABLE}}) - Cards & How to Claim"
-  
-    meta_description_format: "Find the TiCkTOM Daily Combo today for {{CURRENT_DATE_READABLE}}. Upgrade the correct three cards, open the Combo Chest, and claim your daily reward."
-    
-    # Optional: nếu game này cần giờ riêng theo GMT+7
-    # run_times:
-    #   - "02:00"
-    #   - "07:00"
-    #   - "07:30"
-    #   - "08:00"
-    #   - "08:30"
-    #   - "09:00"
-    #   - "09:30"
-    #   - "10:00"
-    #   - "10:30"
-    #   - "11:00"
-    #   - "11:30"
-    #   - "12:00"
+    '
+  question_label: 'Date:'
+  answer_label: 'Today''s Combo:'
+  answer_heading_contains: Today's TiCkTOM Daily Combo
+  template_file: games/ticktom.txt
+  title_format: TiCkTOM Daily Combo Today - {{CURRENT_DATE_READABLE}}
+  slug_format: ticktom-daily-combo-today-{{CURRENT_DATE_SLUG}}
+  seo_title_format: TiCkTOM Daily Combo Today ({{CURRENT_DATE_READABLE}}) - Cards & How to Claim
+  meta_description_format: Find the TiCkTOM Daily Combo today for {{CURRENT_DATE_READABLE}}. Upgrade the correct three cards,
+    open the Combo Chest, and claim your daily reward.
