@@ -127,8 +127,10 @@ games:
     source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/6939"
     template_file: "games/dropee-question.txt"
     featured_media_id: 338223
-    question_selector: "p.has-text-align-center.wp-block-paragraph"
-    answer_selector: "p.has-text-align-center.wp-block-paragraph"
+    question_selector: "p.wp-block-paragraph"
+    answer_selector: "p.wp-block-paragraph"
+    question_prefix: "Question"
+    answer_prefix: "Answer"
 
     check_answer: "Shut Down"
     answer_heading_contains: "Dropee Question of the Day Answer For"
