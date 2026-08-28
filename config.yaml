@@ -302,6 +302,95 @@ games:
     slug_format: "kiedex-daily-quiz-answer-today-{{CURRENT_DATE_SLUG}}"
     seo_title_format: "KieDex Daily Quiz Answer Today – {{CURRENT_DATE_READABLE}}"
     meta_description_format: "KieDex Daily Quiz Answer today, updated daily. Get the correct answer, submit it in the app, protect your KDX Points streak, and see what's moving in crypto today. "
+
+  - game_key: "fomo_fighters"
+    enabled: true
+    post_cycle: "daily"
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/44277"
+  
+    answer_type: "question_answer"
+  
+    # Chỉ parse trong section này.
+    # Match contains nên MiningCombo thêm chữ nhỏ vẫn không sao.
+    source_heading_contains: "fomo fighters daily riddle"
+  
+    # Date trong HTML là nguồn xác định ngày.
+    use_content_date: true
+    source_date_selector: "p"
+    source_date_prefix: "Date"
+  
+    # Riddle:
+    # tìm các paragraph trong đúng section,
+    # bỏ Date và Answer.
+    question_selector: "p"
+    question_prefix: ""
+    question_exclude_prefixes:
+      - "Date"
+      - "Answer"
+  
+    # Answer:
+    # không phụ thuộc span.copy-text.
+    # Chỉ cần paragraph vẫn có "Answer:"
+    answer_selector: "p"
+    answer_prefix: "Answer"
+  
+    question_label: "Riddle:"
+    answer_label: "Answer:"
+  
+    answer_heading_contains: "Today's Fomo Fighters Riddle of the Day Answer"
+  
+    template_file: "templates/fomo_fighters.html"
+  
+    title_format: "Fomo Fighters Riddle of the Day Answer Today – {{CURRENT_DATE_READABLE}}"
+  
+    slug_format: "fomo-fighters-riddle-of-the-day-answer-{{CURRENT_DATE_SLUG}}"
+  
+    seo_title_format: "Fomo Fighters Riddle of the Day Today ({{CURRENT_DATE_READABLE}}) – Daily Answer"
+  
+    meta_description_format: "Fomo Fighters Riddle of the Day answer today, updated daily. Find the correct answer, claim your Red Game Diamonds, and check the latest game updates."
+
+
+  - game_key: "ticktom_daily_combo"
+    enabled: true
+    post_cycle: "daily"
+  
+    source_api_url: "https://miningcombo.com/wp-json/wp/v2/pages/52079"
+  
+    answer_type: "question_answer"
+  
+    source_heading_contains: "ticktom daily combo"
+  
+    use_content_date: true
+    source_date_selector: "p"
+    source_date_prefix: "Date"
+  
+    # Dùng Date làm field question.
+    question_selector: "p"
+    question_prefix: "Date"
+  
+    # Lấy nguyên OL.
+    # Không phụ thuộc class wp-block-list.
+    answer_selector: "ol"
+    answer_prefix: ""
+  
+    # Mỗi LI thành một dòng.
+    answer_text_separator: "\n"
+  
+    question_label: "Date:"
+    answer_label: "Today's Combo:"
+  
+    answer_heading_contains: "Today's TiCkTOM Daily Combo"
+  
+    template_file: "templates/ticktom.html"
+  
+    title_format: "TiCkTOM Daily Combo Today - {{CURRENT_DATE_READABLE}}"
+  
+    slug_format: "ticktom-daily-combo-today-{{CURRENT_DATE_SLUG}}"
+  
+    seo_title_format: "TiCkTOM Daily Combo Today ({{CURRENT_DATE_READABLE}}) - Cards & How to Claim"
+  
+    meta_description_format: "Find the TiCkTOM Daily Combo today for {{CURRENT_DATE_READABLE}}. Upgrade the correct three cards, open the Combo Chest, and claim your daily reward."
     
     # Optional: nếu game này cần giờ riêng theo GMT+7
     # run_times:
