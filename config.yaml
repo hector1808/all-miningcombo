@@ -340,7 +340,7 @@ games:
   
     answer_heading_contains: "Today's Fomo Fighters Riddle of the Day Answer"
   
-    template_file: "templates/fomo_fighters.html"
+    template_file: "games/fomo_fighters.txt"
   
     title_format: "Fomo Fighters Riddle of the Day Answer Today – {{CURRENT_DATE_READABLE}}"
   
@@ -382,7 +382,7 @@ games:
   
     answer_heading_contains: "Today's TiCkTOM Daily Combo"
   
-    template_file: "templates/ticktom.html"
+    template_file: "games/ticktom.txt"
   
     title_format: "TiCkTOM Daily Combo Today - {{CURRENT_DATE_READABLE}}"
   
