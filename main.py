@@ -3102,3 +3102,6 @@ def main():
                 f"{game_cfg.get('game_key')}: "
                 f"{e}"
             )
+
+if __name__ == "__main__":
+    main()
