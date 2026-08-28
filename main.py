@@ -113,15 +113,6 @@ def scheduled_publish_datetime(
     )
 
 
-def wp_date_matches(value, expected_dt, tz_name):
-    current_dt = parse_wp_datetime_local(value, tz_name)
-
-    if not current_dt:
-        return False
-
-    return abs((current_dt - expected_dt).total_seconds()) < 60
-
-
 def parse_wp_datetime_local(value, tz_name):
     if not value:
         return None
@@ -2411,72 +2402,6 @@ def get_wp_post(cfg, post_id):
     return response.json()
 
 
-def reconcile_publish_state(
-    cfg,
-    game_cfg,
-    post,
-    target_date,
-):
-    publish_mode, _, _ = get_publish_settings(cfg, game_cfg)
-    current_status = str(post.get("status") or "").lower()
-
-    if publish_mode == "answer":
-        if current_status in {"future", "pending"}:
-            updated_post = patch_wp_post(
-                cfg,
-                post["id"],
-                {"status": "draft"},
-            )
-            return updated_post, True, "switched_to_answer_draft"
-
-        return post, False, ""
-
-    publish_dt = scheduled_publish_datetime(
-        cfg,
-        game_cfg,
-        target_date,
-    )
-    desired_status = (
-        "future"
-        if publish_dt > now_local(cfg["timezone"])
-        else "publish"
-    )
-
-    if current_status == "publish":
-        return post, False, ""
-
-    if current_status not in {"draft", "future", "pending"}:
-        return post, False, ""
-
-    if (
-        desired_status == "future"
-        and current_status == "future"
-        and wp_date_matches(
-            post.get("date"),
-            publish_dt,
-            cfg["timezone"],
-        )
-    ):
-        return post, False, ""
-
-    updated_post = patch_wp_post(
-        cfg,
-        post["id"],
-        {
-            "status": desired_status,
-            "date": publish_dt.isoformat(),
-        },
-    )
-
-    label = (
-        "scheduled_future"
-        if desired_status == "future"
-        else "published_scheduled_time_passed"
-    )
-
-    return updated_post, True, label
-
-
 def find_wp_posts_by_slug(
     cfg,
     slug,
@@ -2684,29 +2609,11 @@ def create_game_post(cfg, ws, game_cfg):
                 f"Missing post_id in existing Sheet row for {game_key}"
             )
 
-        post = get_wp_post(cfg, post_id)
-        post, state_changed, state_status = reconcile_publish_state(
-            cfg,
-            game_cfg,
-            post,
-            target_date,
-        )
-
-        if state_changed:
-            update_log_row(
-                ws,
-                row_idx,
-                {
-                    "status": state_status,
-                    "updated_at": now_local(
-                        cfg["timezone"]
-                    ).isoformat(timespec="seconds"),
-                },
-            )
-
+        # SAFETY: create mode must never reschedule an existing post.
+        # publish_time / publish_day_offset are applied only when a NEW post is created.
         print(
             f"Create mode: {game_key} already exists "
-            f"as post {post_id}; no duplicate created."
+            f"as post {post_id}; no duplicate and no reschedule."
         )
         return
 
@@ -2732,13 +2639,9 @@ def create_game_post(cfg, ws, game_cfg):
     )
 
     if wp_matches:
+        # SAFETY: recover the existing post into Sheet, but never change
+        # its status/date automatically.
         post = get_wp_post(cfg, wp_matches[0]["id"])
-        post, _, _ = reconcile_publish_state(
-            cfg,
-            game_cfg,
-            post,
-            target_date,
-        )
 
         actual_slug = post.get("slug") or identity["slug"]
         post_url = (
@@ -2927,13 +2830,11 @@ def update_game_post(cfg, ws, game_cfg):
             f"Missing post_id in Sheet for {game_key} {date_str}"
         )
 
+    # SAFETY: update mode must never recalculate or overwrite publish time.
+    # It only updates content. Answer mode may publish the post when a valid
+    # answer arrives; scheduled mode leaves WordPress status/date untouched.
     post = get_wp_post(cfg, post_id)
-    post, state_changed, state_status = reconcile_publish_state(
-        cfg,
-        game_cfg,
-        post,
-        target_date,
-    )
+    state_status = ""
 
     if not source_matches_target:
         update_log_row(
