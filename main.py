@@ -3063,12 +3063,42 @@ def process_game(cfg, ws, game_cfg):
 
 
 def main():
+    run_mode = os.getenv(
+        "RUN_MODE",
+        "update",
+    ).lower()
+
+    print("=" * 60)
+    print(f"RUN_MODE: {run_mode}")
+    print(f"LOCAL TIME: {now_local('Asia/Ho_Chi_Minh')}")
+    print("=" * 60)
+
     cfg = load_config()
+
+    print(
+        f"Timezone: {cfg['timezone']}"
+    )
+
+    print(
+        "Default publish mode: "
+        f"{cfg.get('publishing', {}).get('default_mode')}"
+    )
+
     ws = get_sheet(cfg)
 
     for game_cfg in cfg["games"]:
         try:
-            process_game(cfg, ws, game_cfg)
+            process_game(
+                cfg,
+                ws,
+                game_cfg,
+            )
+
             time.sleep(2)
+
         except Exception as e:
-            print(f"ERROR game={game_cfg.get('game_key')}: {e}")
+            print(
+                f"ERROR game="
+                f"{game_cfg.get('game_key')}: "
+                f"{e}"
+            )
