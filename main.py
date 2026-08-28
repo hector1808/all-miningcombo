@@ -16,6 +16,112 @@ from google.oauth2.service_account import Credentials
 from openai import OpenAI
 
 
+def source_modified_matches_target(
+    source_modified,
+    tz_name,
+    target_date,
+):
+    source_dt = parse_wp_datetime_local(
+        source_modified,
+        tz_name,
+    )
+
+    if not source_dt:
+        return False
+
+    target_start = datetime(
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        tzinfo=ZoneInfo(tz_name),
+    )
+
+    return source_dt >= target_start
+
+
+def get_publish_settings(cfg, game_cfg):
+    defaults = cfg.get("publishing", {})
+
+    mode = str(
+        game_cfg.get(
+            "publish_mode",
+            defaults.get("default_mode", "scheduled"),
+        )
+    ).strip().lower()
+
+    if mode not in {"scheduled", "answer"}:
+        raise RuntimeError(
+            f"Invalid publish_mode for {game_cfg['game_key']}: {mode}"
+        )
+
+    publish_time = str(
+        game_cfg.get(
+            "publish_time",
+            defaults.get("default_time", "22:00"),
+        )
+    ).strip()
+
+    try:
+        hour, minute = map(int, publish_time.split(":"))
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            f"Invalid publish_time for {game_cfg['game_key']}: "
+            f"{publish_time}. Expected HH:MM."
+        )
+
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise RuntimeError(
+            f"Invalid publish_time for {game_cfg['game_key']}: "
+            f"{publish_time}."
+        )
+
+    try:
+        day_offset = int(
+            game_cfg.get(
+                "publish_day_offset",
+                defaults.get("default_day_offset", -1),
+            )
+        )
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            f"Invalid publish_day_offset for {game_cfg['game_key']}"
+        )
+
+    return mode, publish_time, day_offset
+
+
+def scheduled_publish_datetime(
+    cfg,
+    game_cfg,
+    target_date,
+):
+    _, publish_time, day_offset = get_publish_settings(
+        cfg,
+        game_cfg,
+    )
+
+    hour, minute = map(int, publish_time.split(":"))
+    publish_date = target_date + timedelta(days=day_offset)
+
+    return datetime(
+        publish_date.year,
+        publish_date.month,
+        publish_date.day,
+        hour,
+        minute,
+        tzinfo=ZoneInfo(cfg["timezone"]),
+    )
+
+
+def wp_date_matches(value, expected_dt, tz_name):
+    current_dt = parse_wp_datetime_local(value, tz_name)
+
+    if not current_dt:
+        return False
+
+    return abs((current_dt - expected_dt).total_seconds()) < 60
+
+
 def parse_wp_datetime_local(value, tz_name):
     if not value:
         return None
@@ -29,6 +135,7 @@ def parse_wp_datetime_local(value, tz_name):
         dt = dt.astimezone(ZoneInfo(tz_name))
 
     return dt
+
 
 def parse_wp_datetime_gmt(value, tz_name):
     """
@@ -54,28 +161,6 @@ def parse_wp_datetime_gmt(value, tz_name):
     return dt.astimezone(
         ZoneInfo(tz_name)
     )
-
-def target_date_start_datetime(tz_name):
-    d = get_target_date(tz_name)
-
-    return datetime(
-        d.year,
-        d.month,
-        d.day,
-        0,
-        0,
-        0,
-        tzinfo=ZoneInfo(tz_name),
-    )
-
-
-def is_source_for_target_date(source_modified, tz_name):
-    source_dt = parse_wp_datetime_local(source_modified, tz_name)
-
-    if not source_dt:
-        return False
-
-    return source_dt >= target_date_start_datetime(tz_name)
 
 
 def load_config():
@@ -106,79 +191,6 @@ def get_target_date(tz_name):
 
     raise RuntimeError(f"Invalid RUN_MODE: {run_mode}")
 
-def scheduled_publish_datetime(
-    tz_name,
-    game_cfg,
-    target_date,
-):
-    post_cycle = game_cfg.get(
-        "post_cycle",
-        "daily",
-    )
-
-    publish_time = game_cfg.get(
-        "publish_time",
-        "22:00",
-    )
-
-    hour, minute = map(
-        int,
-        publish_time.split(":"),
-    )
-
-    if post_cycle == "weekly":
-        publish_date = target_date
-    else:
-        # Giữ nguyên hành vi daily hiện tại:
-        # create vào sáng hôm nay,
-        # publish lúc 22:00 hôm nay.
-        publish_date = now_local(
-            tz_name
-        ).date()
-
-    return datetime(
-        publish_date.year,
-        publish_date.month,
-        publish_date.day,
-        hour,
-        minute,
-        0,
-        tzinfo=ZoneInfo(tz_name),
-    )
-
-def target_date_str(tz_name):
-    return get_target_date(tz_name).isoformat()
-
-
-def target_date_readable(tz_name):
-    d = get_target_date(tz_name)
-    return f"{d.strftime('%B')} {d.day}, {d.year}"
-
-def target_date_slug(tz_name):
-    d = get_target_date(tz_name)
-
-    return f"{d.day}-{d.strftime('%B').lower()}-{d.year}"
-
-def format_datetime_readable(datetime_value):
-    offset = datetime_value.strftime("%z")
-
-    if offset:
-        offset = f"{offset[:3]}:{offset[3:]}"
-        timezone_text = f"UTC{offset}"
-    else:
-        timezone_text = ""
-
-    result = (
-        f"{datetime_value.strftime('%B')} "
-        f"{datetime_value.day}, "
-        f"{datetime_value.year} at "
-        f"{datetime_value.strftime('%H:%M')}"
-    )
-
-    if timezone_text:
-        result += f" ({timezone_text})"
-
-    return result
 
 def format_date_readable(date_value):
     return (
@@ -195,75 +207,6 @@ def format_date_slug(date_value):
         f"{date_value.year}"
     )
 
-
-def get_recent_sunday(tz_name):
-    """
-    Trả về ngày Chủ nhật gần nhất.
-
-    Nếu hôm nay là Chủ nhật:
-        trả về chính hôm nay.
-
-    Nếu hôm nay là thứ Hai đến thứ Bảy:
-        trả về Chủ nhật vừa qua.
-    """
-    today = now_local(tz_name).date()
-
-    # weekday():
-    # Monday = 0
-    # Sunday = 6
-    days_since_sunday = (today.weekday() + 1) % 7
-
-    return today - timedelta(days=days_since_sunday)
-
-
-def get_game_target_date(tz_name, game_cfg):
-    post_cycle = game_cfg.get("post_cycle", "daily")
-
-    if post_cycle == "weekly":
-        return get_recent_sunday(tz_name)
-
-    return get_target_date(tz_name)
-
-
-def get_week_campaign_dates(publish_sunday):
-    """
-    Ví dụ:
-    publish_sunday = 2026-07-12
-
-    campaign_start = 2026-07-13
-    campaign_end   = 2026-07-19
-    """
-    campaign_start = publish_sunday + timedelta(days=1)
-    campaign_end = publish_sunday + timedelta(days=7)
-
-    return campaign_start, campaign_end
-
-
-def format_date_range_readable(start_date, end_date):
-    if start_date.year == end_date.year:
-        return (
-            f"{start_date.strftime('%B')} {start_date.day} "
-            f"to {end_date.strftime('%B')} {end_date.day}, "
-            f"{end_date.year}"
-        )
-
-    return (
-        f"{start_date.strftime('%B')} {start_date.day}, "
-        f"{start_date.year} to "
-        f"{end_date.strftime('%B')} {end_date.day}, "
-        f"{end_date.year}"
-    )
-
-
-def format_date_range_slug(start_date, end_date):
-    return (
-        f"{start_date.day}-"
-        f"{start_date.strftime('%B').lower()}-"
-        f"{start_date.year}-to-"
-        f"{end_date.day}-"
-        f"{end_date.strftime('%B').lower()}-"
-        f"{end_date.year}"
-    )
 
 def make_city_combo_signature(combo_lines):
     if not combo_lines:
@@ -360,26 +303,6 @@ def replace_date_vars(text, date_str, readable_date=None, slug_date=None):
 
     if slug_date:
         text = text.replace("{{CURRENT_DATE_SLUG}}", slug_date)
-
-    return text
-
-def replace_game_vars(
-    text,
-    date_str,
-    readable_date,
-    slug_date,
-    extra_vars=None,
-):
-    text = replace_date_vars(
-        text=text,
-        date_str=date_str,
-        readable_date=readable_date,
-        slug_date=slug_date,
-    )
-
-    for key, value in (extra_vars or {}).items():
-        placeholder = "{{" + key + "}}"
-        text = text.replace(placeholder, str(value))
 
     return text
 
@@ -503,6 +426,7 @@ def fetch_source_page(url):
     r.raise_for_status()
     return r.json()
 
+
 def strip_prefix(text, prefix):
     text = text.strip()
     prefix = prefix.strip().rstrip(":")
@@ -514,6 +438,7 @@ def strip_prefix(text, prefix):
         return ""
 
     return text[match.end():].strip()
+
 
 def extract_by_selector_and_prefix(
     soup,
@@ -561,7 +486,15 @@ def extract_by_selector_and_prefix(
             continue
 
         # Prefix rỗng = lấy nguyên text.
+        # Giữ xuống dòng cho các list như TiCkTOM.
         if prefix == "":
+            if text_separator == "\n":
+                return "\n".join(
+                    normalize_answer(line)
+                    for line in text.splitlines()
+                    if normalize_answer(line)
+                )
+
             return normalize_answer(text)
 
         value = strip_prefix(
@@ -760,161 +693,6 @@ def extract_question_answer(
         source_date,
     )
 
-def extract_binance_wotd(content_html):
-    soup = BeautifulSoup(content_html, "html.parser")
-
-    theme = ""
-    reward = ""
-    campaign_start = None
-    campaign_end = None
-    answer_groups = {}
-
-    # Tìm paragraph chứa Theme và Date.
-    summary_p = None
-
-    for p in soup.select("p.wp-block-paragraph"):
-        text = p.get_text(" ", strip=True)
-
-        if (
-            re.search(r"\bTheme\s*:", text, flags=re.I)
-            and re.search(r"\bDate\s*:", text, flags=re.I)
-        ):
-            summary_p = p
-            break
-
-    if summary_p:
-        summary_text = html.unescape(
-            summary_p.get_text(" ", strip=True)
-        )
-
-        theme_match = re.search(
-            r"Theme\s*:\s*(.*?)\s+Date\s*:",
-            summary_text,
-            flags=re.I,
-        )
-
-        if theme_match:
-            theme = theme_match.group(1).strip()
-
-        date_match = re.search(
-            r"Date\s*:\s*"
-            r"(\d{4}-\d{2}-\d{2})"
-            r"\s+to\s+"
-            r"(\d{4}-\d{2}-\d{2})",
-            summary_text,
-            flags=re.I,
-        )
-
-        if date_match:
-            campaign_start = datetime.fromisoformat(
-                date_match.group(1)
-            ).date()
-
-            campaign_end = datetime.fromisoformat(
-                date_match.group(2)
-            ).date()
-
-        # Ưu tiên tìm mark chứa "to be shared".
-        for mark in summary_p.find_all("mark"):
-            mark_text = mark.get_text(" ", strip=True)
-
-            if "to be shared" in mark_text.lower():
-                reward = mark_text
-                break
-
-        # Fallback nếu reward không nằm trong mark.
-        if not reward:
-            reward_match = re.search(
-                r"([0-9][A-Za-z0-9 .,+-]*?"
-                r"\bto be shared!?)",
-                summary_text,
-                flags=re.I,
-            )
-
-            if reward_match:
-                reward = reward_match.group(1).strip()
-
-    # Lấy các nhóm đáp án 3-8 letters.
-    for h3 in soup.find_all("h3"):
-        heading_text = html.unescape(
-            h3.get_text(" ", strip=True)
-        )
-
-        length_match = re.search(
-            r"Answer\s+(\d+)\s+letters",
-            heading_text,
-            flags=re.I,
-        )
-
-        if not length_match:
-            continue
-
-        word_length = length_match.group(1)
-
-        answer_list = h3.find_next_sibling("ul")
-
-        if not answer_list:
-            answer_list = h3.find_next("ul")
-
-        answers = []
-
-        if answer_list:
-            answers = [
-                li.get_text(" ", strip=True)
-                for li in answer_list.find_all(
-                    "li",
-                    recursive=False,
-                )
-                if li.get_text(" ", strip=True)
-            ]
-
-        answer_groups[word_length] = answers
-
-    return {
-        "theme": theme,
-        "reward": reward,
-        "campaign_start": campaign_start,
-        "campaign_end": campaign_end,
-        "answer_groups": answer_groups,
-    }
-
-def make_binance_wotd_signature(answer_data):
-    campaign_start = answer_data.get(
-        "campaign_start"
-    )
-    campaign_end = answer_data.get(
-        "campaign_end"
-    )
-
-    payload = {
-        "theme": answer_data.get("theme") or "",
-        "reward": answer_data.get("reward") or "",
-        "campaign_start": (
-            campaign_start.isoformat()
-            if campaign_start
-            else ""
-        ),
-        "campaign_end": (
-            campaign_end.isoformat()
-            if campaign_end
-            else ""
-        ),
-        "answer_groups": answer_data.get(
-            "answer_groups",
-            {},
-        ),
-    }
-
-    serialized = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-    return hashlib.sha256(
-        serialized.encode("utf-8")
-    ).hexdigest()
 
 def find_label_element(soup, selector, prefix):
     """
@@ -935,6 +713,7 @@ def find_label_element(soup, selector, prefix):
             return el
 
     return None
+
 
 def extract_hamster_cipher(content_html, game_cfg):
     soup = BeautifulSoup(content_html, "html.parser")
@@ -1026,6 +805,7 @@ def extract_hamster_cipher(content_html, game_cfg):
             ]
 
     return word, morse_lines, simplified_lines
+
 
 def extract_quote_author(content_html):
     soup = BeautifulSoup(
@@ -1120,83 +900,6 @@ def extract_quote_author(content_html):
 
     return source_date, quote, author
 
-def extract_red_packet_codes(content_html):
-    soup = BeautifulSoup(
-        content_html,
-        "html.parser",
-    )
-
-    # Chấp nhận cả:
-    # #12 Code Is:
-    # #02 No Code Is:
-    code_pattern = re.compile(
-        r"^\s*#\s*(\d+)\s+"
-        r"(?:No\s+)?"
-        r"Code\s+Is\s*:?",
-        flags=re.I,
-    )
-
-    codes_by_number = {}
-
-    for p in soup.select(
-        "p.wp-block-paragraph"
-    ):
-        paragraph_text = html.unescape(
-            p.get_text(" ", strip=True)
-        )
-
-        match = code_pattern.search(
-            paragraph_text
-        )
-
-        if not match:
-            continue
-
-        number = int(
-            match.group(1)
-        )
-
-        code_element = p.select_one(
-            "span.copy-text"
-        )
-
-        if not code_element:
-            continue
-
-        # Ưu tiên giá trị dùng cho chức năng copy.
-        code = (
-            code_element.get(
-                "data-original-text"
-            )
-            or code_element.get_text(
-                " ",
-                strip=True,
-            )
-        )
-
-        code = html.unescape(
-            str(code)
-        ).strip()
-
-        if not code:
-            continue
-
-        # Nếu source vô tình có cùng một số nhiều lần,
-        # giá trị xuất hiện sau cùng sẽ được sử dụng.
-        codes_by_number[number] = code
-
-    # Luôn chuẩn hóa thứ tự:
-    # code có số lớn nhất nằm trên cùng.
-    return [
-        {
-            "number": number,
-            "code": codes_by_number[number],
-        }
-        for number in sorted(
-            codes_by_number,
-            reverse=True,
-        )
-    ]
 
 def extract_money_bux_codes(content_html):
     soup = BeautifulSoup(
@@ -1283,6 +986,7 @@ def extract_money_bux_codes(content_html):
         )
     ]
 
+
 def find_city_combo_element(soup):
     for h2 in soup.find_all("h2"):
         heading = html.unescape(
@@ -1301,38 +1005,6 @@ def find_city_combo_element(soup):
 
             # Không tìm tràn sang section kế tiếp
             if tag == "h2":
-                break
-
-    return None
-
-def find_pre_after_heading(
-    soup,
-    heading_match,
-):
-    """
-    Tìm pre nằm sau H2 phù hợp.
-    Không dùng #tw-target-text vì source có nhiều ID trùng nhau.
-    """
-    for h2 in soup.find_all("h2"):
-        heading_text = html.unescape(
-            h2.get_text(" ", strip=True)
-        ).lower()
-
-        if not heading_match(heading_text):
-            continue
-
-        for sibling in h2.next_siblings:
-            tag_name = getattr(
-                sibling,
-                "name",
-                None,
-            )
-
-            if tag_name == "pre":
-                return sibling
-
-            # Không tìm tràn sang section tiếp theo.
-            if tag_name == "h2":
                 break
 
     return None
@@ -1364,23 +1036,6 @@ def extract_pre_lines(pre_element):
     return lines
 
 
-def extract_numbered_answers(lines):
-    answers = []
-
-    for line in lines:
-        match = re.match(
-            r"^\s*\d+\.\s*(.+?)\s*$",
-            line,
-        )
-
-        if match:
-            answers.append(
-                match.group(1).strip()
-            )
-
-    return answers
-
-
 def is_waiting_content(lines):
     text = " ".join(lines).lower()
 
@@ -1395,6 +1050,7 @@ def is_waiting_content(lines):
         phrase in text
         for phrase in waiting_phrases
     )
+
 
 def extract_city_quiz_date(soup):
     for h2 in soup.find_all("h2"):
@@ -1435,6 +1091,7 @@ def extract_city_quiz_date(soup):
                     return None
 
     return None
+
 
 def extract_city_quiz_en(soup):
     for h2 in soup.find_all("h2"):
@@ -1499,6 +1156,7 @@ def extract_city_quiz_en(soup):
 
     return []
 
+
 def extract_city_quiz_ru(soup):
     for h2 in soup.find_all("h2"):
         heading = normalize_answer(
@@ -1539,70 +1197,47 @@ def extract_city_quiz_ru(soup):
 
     return []
 
-        
-def extract_city_holder_data(content_html):
-    soup = BeautifulSoup(
-        content_html,
-        "html.parser",
-    )
 
-    # =====================================================
-    # 1. COMBO
-    # =====================================================
+def extract_city_combo_lines(soup):
+    combo_element = find_city_combo_element(soup)
 
-    combo_element = find_city_combo_element(
-        soup
-    )
-    
-    combo_lines = []
-    
-    if combo_element:
-        if combo_element.name == "pre":
-            # Format cũ
-            combo_lines = extract_pre_lines(
-                combo_element
+    if not combo_element:
+        return []
+
+    if combo_element.name == "pre":
+        combo_lines = extract_pre_lines(combo_element)
+    else:
+        combo_lines = [
+            f"{index}. {normalize_answer(li.get_text(' ', strip=True))}"
+            for index, li in enumerate(
+                combo_element.find_all("li", recursive=False),
+                start=1,
             )
-    
-        elif combo_element.name == "ol":
-            # Format mới
-            combo_lines = [
-                f"{i}. {html.unescape(li.get_text(' ', strip=True))}"
-                for i, li in enumerate(
-                    combo_element.find_all(
-                        "li",
-                        recursive=False,
-                    ),
-                    start=1,
-                )
-                if li.get_text(" ", strip=True)
-            ]
-    
+            if normalize_answer(li.get_text(" ", strip=True))
+        ]
+
     if is_waiting_content(combo_lines):
-        combo_lines = []
+        return []
 
-    # =====================================================
-    # 2. QUIZ
-    # =====================================================
+    return combo_lines
 
-    quiz_date = extract_city_quiz_date(
-        soup
-    )
 
-    quiz_en = extract_city_quiz_en(
-        soup
-    )
+def extract_city_holder_data(content_html, log_result=True):
+    soup = BeautifulSoup(content_html, "html.parser")
 
-    quiz_ru = extract_city_quiz_ru(
-        soup
-    )
+    combo_lines = extract_city_combo_lines(soup)
+    quiz_date = extract_city_quiz_date(soup)
+    quiz_en = extract_city_quiz_en(soup)
+    quiz_ru = extract_city_quiz_ru(soup)
 
-    print(
-        "City Holder parsed: "
-        f"combo={len(combo_lines)}, "
-        f"quiz_date={quiz_date}, "
-        f"quiz_en={len(quiz_en)}, "
-        f"quiz_ru={len(quiz_ru)}"
-    )
+    if log_result:
+        print(
+            "City Holder parsed: "
+            f"combo={len(combo_lines)}, "
+            f"quiz_date={quiz_date}, "
+            f"quiz_en={len(quiz_en)}, "
+            f"quiz_ru={len(quiz_ru)}"
+        )
 
     return {
         "combo_lines": combo_lines,
@@ -1611,6 +1246,7 @@ def extract_city_holder_data(content_html):
         "quiz_ru": quiz_ru,
     }
 
+
 def extract_game_answer_data(content_html, game_cfg, cfg):
     answer_type = game_cfg.get(
         "answer_type",
@@ -1618,11 +1254,7 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
     )
 
     if answer_type == "money_bux_codes":
-        codes = extract_money_bux_codes(
-            content_html
-        )
-
-        # Chuẩn hóa toàn bộ danh sách thành JSON.
+        codes = extract_money_bux_codes(content_html)
         answer_json = json.dumps(
             codes,
             ensure_ascii=False,
@@ -1630,80 +1262,35 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             separators=(",", ":"),
         )
 
-        # Chỉ tạo hash khi lấy được ít nhất một code.
-        if codes:
-            check_value = hashlib.sha256(
-                answer_json.encode("utf-8")
-            ).hexdigest()
-        else:
-            check_value = ""
-
         return {
-            "answer_type": "money_bux_codes",
-
-            # Google Sheet.
+            "answer_type": answer_type,
             "question": "",
-            "answer": (
-                answer_json
+            "answer": answer_json if codes else "",
+            "check_value": (
+                hashlib.sha256(answer_json.encode("utf-8")).hexdigest()
                 if codes
                 else ""
             ),
-            "check_value": check_value,
-
-            # Dữ liệu dùng để tạo HTML.
             "codes": codes,
         }
 
     if answer_type == "city_holder":
-        city_data = extract_city_holder_data(
-            content_html
-        )
-
-        combo_lines = city_data.get(
-            "combo_lines",
-            [],
-        )
-
-        quiz_date = city_data.get(
-            "quiz_date"
-        )
-
-        quiz_en = city_data.get(
-            "quiz_en",
-            [],
-        )
-
-        quiz_ru = city_data.get(
-            "quiz_ru",
-            [],
-        )
+        city_data = extract_city_holder_data(content_html)
+        combo_lines = city_data["combo_lines"]
+        quiz_date = city_data["quiz_date"]
+        quiz_en = city_data["quiz_en"]
+        quiz_ru = city_data["quiz_ru"]
 
         answer_payload = {
             "combo_lines": combo_lines,
-
-            "quiz_date": (
-                quiz_date.isoformat()
-                if quiz_date
-                else ""
-            ),
-
+            "quiz_date": quiz_date.isoformat() if quiz_date else "",
             "quiz_en": quiz_en,
             "quiz_ru": quiz_ru,
         }
 
-        has_combo = bool(
-            combo_lines
-        )
-
-        has_quiz = bool(
-            quiz_en
-            or quiz_ru
-        )
-
-        has_data = bool(
-            has_combo
-            or has_quiz
-        )
+        has_combo = bool(combo_lines)
+        has_quiz = bool(quiz_en or quiz_ru)
+        has_data = has_combo or has_quiz
 
         answer_json = json.dumps(
             answer_payload,
@@ -1712,286 +1299,111 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
             separators=(",", ":"),
         )
 
-        if has_data:
-            check_value = hashlib.sha256(
-                answer_json.encode("utf-8")
-            ).hexdigest()
-        else:
-            check_value = ""
-
-        # Signature riêng cho Combo.
-        # Dùng để phân biệt Combo mới/cũ,
-        # không bị Quiz làm ảnh hưởng.
-        combo_json = json.dumps(
-            combo_lines,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-
-        combo_check_value = (
-            hashlib.sha256(
-                combo_json.encode("utf-8")
-            ).hexdigest()
-            if combo_lines
-            else ""
-        )
-
         return {
-            "answer_type": "city_holder",
-
+            "answer_type": answer_type,
             "question": "",
-
-            "answer": (
-                answer_json
+            "answer": answer_json if has_data else "",
+            "check_value": (
+                hashlib.sha256(answer_json.encode("utf-8")).hexdigest()
                 if has_data
                 else ""
             ),
-
-            "check_value": check_value,
-
-            "combo_check_value": (
-                combo_check_value
-            ),
-
-            "combo_lines": combo_lines,
-
+            "combo_check_value": make_city_combo_signature(combo_lines),
+            **answer_payload,
             "quiz_date": quiz_date,
-
-            "quiz_en": quiz_en,
-
-            "quiz_ru": quiz_ru,
-
             "has_combo": has_combo,
-
             "has_quiz": has_quiz,
-
             "has_data": has_data,
         }
 
-    if answer_type == "red_packet_codes":
-        codes = extract_red_packet_codes(
-            content_html
-        )
-
-        # JSON được chuẩn hóa để lưu Sheet
-        # và tạo hash ổn định.
-        answer_json = json.dumps(
-            codes,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-
-        # Không tạo hash nếu source chưa có code.
-        if codes:
-            check_value = hashlib.sha256(
-                answer_json.encode("utf-8")
-            ).hexdigest()
-        else:
-            check_value = ""
-
-        return {
-            "answer_type": "red_packet_codes",
-
-            # Dữ liệu chung dùng cho Google Sheet.
-            "question": "",
-            "answer": answer_json if codes else "",
-            "check_value": check_value,
-
-            # Dữ liệu dùng để render HTML.
-            "codes": codes,
-        }
-
     if answer_type == "quote_author":
-        source_date, quote, author = (
-            extract_quote_author(
-                content_html
-            )
-        )
-
-        has_data = bool(
-            source_date
-            and (
-                quote
-                or author
-            )
-        )
-        
-        is_complete = bool(
-            source_date
-            and quote
-            and author
-        )
+        source_date, quote, author = extract_quote_author(content_html)
+        has_data = bool(source_date and (quote or author))
 
         answer_payload = {
-            "source_date": (
-                source_date.isoformat()
-                if source_date
-                else ""
-            ),
+            "source_date": source_date.isoformat() if source_date else "",
             "quote": quote,
             "author": author,
         }
 
-        # Chỉ tạo check_value khi dữ liệu đầy đủ.
-        # Tránh update post khi source mới chỉ có Date
-        # nhưng chưa có quote hoặc author.
-        if has_data:
-            check_value = json.dumps(
+        check_value = (
+            json.dumps(
                 answer_payload,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
             )
-        else:
-            check_value = ""
+            if has_data
+            else ""
+        )
 
         return {
-            "answer_type": "quote_author",
-
-            # Dữ liệu chung cho Google Sheet.
+            "answer_type": answer_type,
             "question": quote,
             "answer": author,
             "check_value": check_value,
-
-            # Dữ liệu riêng của Hrum.
             "source_date": source_date,
             "quote": quote,
             "author": author,
-            "is_complete": is_complete,
             "has_data": has_data,
         }
 
     if answer_type == "hamster_cipher":
-        word, morse_lines, simplified_lines = (
-            extract_hamster_cipher(
-                content_html=content_html,
-                game_cfg=game_cfg,
-            )
+        word, morse_lines, simplified_lines = extract_hamster_cipher(
+            content_html=content_html,
+            game_cfg=game_cfg,
         )
-    
+
         answer_payload = {
             "word": word,
             "morse_lines": morse_lines,
             "simplified_lines": simplified_lines,
         }
-    
-        # Signature giúp phát hiện thay đổi không chỉ ở Word,
-        # mà cả Morse và Hold/Tap.
-        check_value = json.dumps(
-            answer_payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    
-        answer_text_parts = []
-    
-        if morse_lines:
-            answer_text_parts.append(
-                "Morse:\n" + "\n".join(morse_lines)
-            )
-    
-        if simplified_lines:
-            answer_text_parts.append(
-                "Simplified:\n"
-                + "\n".join(simplified_lines)
-            )
-    
-        return {
-            "answer_type": "hamster_cipher",
-    
-            # Dùng các cột Sheet hiện tại.
-            "question": word,
-            "answer": "\n\n".join(answer_text_parts),
-            "check_value": check_value,
-    
-            # Dữ liệu riêng để render HTML.
-            "word": word,
-            "morse_lines": morse_lines,
-            "simplified_lines": simplified_lines,
-        }
 
-    if answer_type == "binance_wotd":
-        wotd_data = extract_binance_wotd(
-            content_html
-        )
-    
-        signature = make_binance_wotd_signature(
-            wotd_data
-        )
-    
-        answer_groups_json = json.dumps(
-            wotd_data.get("answer_groups", {}),
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-    
+        answer_text = []
+
+        if morse_lines:
+            answer_text.append("Morse:\n" + "\n".join(morse_lines))
+
+        if simplified_lines:
+            answer_text.append(
+                "Simplified:\n" + "\n".join(simplified_lines)
+            )
+
         return {
-            "answer_type": "binance_wotd",
-    
-            # Dữ liệu chung dùng cho Sheet.
-            "question": wotd_data.get("theme", ""),
-            "answer": answer_groups_json,
-            "check_value": signature,
-    
-            # Dữ liệu riêng của Binance WOTD.
-            "theme": wotd_data.get("theme", ""),
-            "reward": wotd_data.get("reward", ""),
-            "campaign_start": wotd_data.get(
-                "campaign_start"
+            "answer_type": answer_type,
+            "question": word,
+            "answer": "\n\n".join(answer_text),
+            "check_value": json.dumps(
+                answer_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
             ),
-            "campaign_end": wotd_data.get(
-                "campaign_end"
-            ),
-            "answer_groups": wotd_data.get(
-                "answer_groups",
-                {},
-            ),
+            **answer_payload,
         }
 
     if answer_type == "question_answer":
-        (
-            question,
-            answer,
-            source_date,
-        ) = extract_question_answer(
+        question, answer, source_date = extract_question_answer(
             content_html=content_html,
             game_cfg=game_cfg,
             cfg=cfg,
         )
 
         return {
-            "answer_type": "question_answer",
+            "answer_type": answer_type,
             "question": question,
             "answer": answer,
             "check_value": answer,
             "source_date": source_date,
         }
 
-    if answer_type == "question_answer":
-        question, answer = extract_question_answer(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            cfg=cfg,
-        )
-
-        return {
-            "answer_type": "question_answer",
-            "question": question,
-            "answer": answer,
-            "check_value": answer,
-        }
-
     raise RuntimeError(
-        f"Unsupported answer_type: {answer_type}"
+        f"Unsupported answer_type in main.py: {answer_type}"
     )
 
-def make_waiting_answer_data(
-    game_cfg,
-    campaign_start=None,
-    campaign_end=None,
-):
+
+def make_waiting_answer_data(game_cfg):
     answer_type = game_cfg.get(
         "answer_type",
         "question_answer",
@@ -1999,7 +1411,7 @@ def make_waiting_answer_data(
 
     if answer_type == "money_bux_codes":
         return {
-            "answer_type": "money_bux_codes",
+            "answer_type": answer_type,
             "question": "",
             "answer": "Updating soon.",
             "check_value": "",
@@ -2008,63 +1420,35 @@ def make_waiting_answer_data(
 
     if answer_type == "city_holder":
         return {
-            "answer_type": "city_holder",
+            "answer_type": answer_type,
             "question": "",
             "answer": "Updating soon.",
             "check_value": "",
+            "combo_check_value": "",
             "combo_lines": [],
+            "quiz_date": None,
             "quiz_en": [],
             "quiz_ru": [],
+            "has_combo": False,
+            "has_quiz": False,
             "has_data": False,
-        }
-
-    if answer_type == "red_packet_codes":
-        return {
-            "answer_type": "red_packet_codes",
-            "question": "",
-            "answer": "Updating soon.",
-            "check_value": "",
-            "codes": [],
         }
 
     if answer_type == "quote_author":
         return {
-            "answer_type": "quote_author",
+            "answer_type": answer_type,
             "question": "Updating soon.",
             "answer": "Updating soon.",
             "check_value": "",
             "source_date": None,
             "quote": "Updating soon.",
             "author": "Updating soon.",
-            "is_complete": False,
             "has_data": False,
-        }
-
-    if answer_type == "binance_wotd":
-        empty_groups = {
-            str(length): []
-            for length in range(3, 9)
-        }
-
-        return {
-            "answer_type": "binance_wotd",
-            "question": "Updating soon.",
-            "answer": json.dumps(
-                empty_groups,
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-            "check_value": "",
-            "theme": "Updating soon.",
-            "reward": "Updating soon.",
-            "campaign_start": campaign_start,
-            "campaign_end": campaign_end,
-            "answer_groups": empty_groups,
         }
 
     if answer_type == "hamster_cipher":
         return {
-            "answer_type": "hamster_cipher",
+            "answer_type": answer_type,
             "question": "Updating soon.",
             "answer": "Updating soon.",
             "check_value": "",
@@ -2078,6 +1462,7 @@ def make_waiting_answer_data(
         "question": "Updating soon.",
         "answer": "Updating soon.",
         "check_value": "",
+        "source_date": None,
     }
 
 
@@ -2138,8 +1523,6 @@ def make_base_snapshot(crypto_data):
 
 def rewrite_snapshot_with_openai(cfg, game_key, base_snapshot):
     client = OpenAI(api_key=get_env("OPENAI_API_KEY"))
-
-    phrases = ", ".join(cfg["crypto_snapshot"]["required_phrases"])
 
     prompt = f"""
 You are a professional cryptocurrency market editor.
@@ -2301,6 +1684,7 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
 
     return str(soup)
 
+
 def build_quote_author_answer_area(
     readable_date,
     quote,
@@ -2331,6 +1715,7 @@ def build_quote_author_answer_area(
         "<p><strong>Answer:</strong> "
         f"{safe_author}</p>"
     )
+
 
 def build_money_bux_answer_area(
     codes,
@@ -2364,56 +1749,6 @@ def build_money_bux_answer_area(
         html_parts
     )
 
-def build_red_packet_answer_area(
-    codes,
-    last_updated_text,
-):
-    safe_updated_text = html.escape(
-        str(last_updated_text)
-    )
-
-    html_parts = [
-        (
-            "<p><strong>Last updated:</strong> "
-            f"{safe_updated_text}</p>"
-        )
-    ]
-
-    if not codes:
-        html_parts.append(
-            "<p>Updating soon.</p>"
-        )
-
-        return "\n".join(html_parts)
-
-    for item in codes:
-        number = int(
-            item["number"]
-        )
-
-        code = str(
-            item["code"]
-        ).strip()
-
-        safe_code_text = html.escape(
-            code
-        )
-
-        safe_code_attr = html.escape(
-            code,
-            quote=True,
-        )
-
-        html_parts.append(
-            f"<p>#{number:02d} Code Is: "
-            f'<span class="copy-text" '
-            f'data-original-text="{safe_code_attr}">'
-            f"{safe_code_text}"
-            "</span>"
-            "</p>"
-        )
-
-    return "\n".join(html_parts)
 
 def build_city_holder_answer_area(
     readable_date,
@@ -2538,6 +1873,7 @@ def build_city_holder_answer_area(
 
     return "\n".join(html_parts)
 
+
 def build_hamster_cipher_answer_area(
     readable_date,
     word,
@@ -2612,152 +1948,6 @@ def build_hamster_cipher_answer_area(
 
     return "\n".join(html_parts)
 
-def build_binance_wotd_answer_area(
-    answer_data,
-    last_verified_date=None,
-):
-    campaign_start = answer_data.get(
-        "campaign_start"
-    )
-    campaign_end = answer_data.get(
-        "campaign_end"
-    )
-
-    if campaign_start and campaign_end:
-        campaign_range = format_date_range_readable(
-            campaign_start,
-            campaign_end,
-        )
-    else:
-        campaign_range = "Updating soon."
-
-    theme = html.escape(
-        str(
-            answer_data.get("theme")
-            or "Updating soon."
-        )
-    )
-
-    reward = html.escape(
-        str(
-            answer_data.get("reward")
-            or "Updating soon."
-        )
-    )
-
-    if last_verified_date:
-        verified_text = format_date_readable(
-            last_verified_date
-        )
-    else:
-        verified_text = "Updating soon."
-
-    answer_groups = answer_data.get(
-        "answer_groups",
-        {},
-    )
-
-    html_parts = []
-
-    html_parts.append(
-        "<h2><strong>"
-        "Binance Word of the Day (WOTD) "
-        f"Answer Today – {html.escape(campaign_range)}"
-        "</strong></h2>"
-    )
-
-    html_parts.append(
-        "<p><strong>Campaign Theme:</strong> "
-        f"{theme}</p>"
-    )
-
-    html_parts.append(
-        "<p><strong>Activity Dates:</strong> "
-        f"{html.escape(campaign_range)}</p>"
-    )
-
-    html_parts.append(
-        "<p><strong>Last Verified:</strong> "
-        f"{html.escape(verified_text)}</p>"
-    )
-
-    html_parts.append(
-        "<p><strong>Prize pool:</strong> "
-        f"{reward}</p>"
-    )
-
-    html_parts.append(
-        "<p><strong>"
-        "How Many Letters Is the Word "
-        "You Are Searching For?"
-        "</strong></p>"
-    )
-
-    # Danh sách link nhảy xuống heading.
-    navigation_items = []
-
-    for length in range(3, 9):
-        anchor_id = (
-            f"binance-wotd-{length}-letters"
-        )
-
-        navigation_items.append(
-            "<li>"
-            f'<a href="#{anchor_id}">'
-            "<strong>"
-            "Binance Word of the Day "
-            f"{length} letters today"
-            "</strong>"
-            "</a>"
-            "</li>"
-        )
-
-    html_parts.append(
-        "<ul>\n"
-        + "\n".join(navigation_items)
-        + "\n</ul>"
-    )
-
-    # Heading + answers.
-    for length in range(3, 9):
-        length_key = str(length)
-
-        anchor_id = (
-            f"binance-wotd-{length}-letters"
-        )
-
-        html_parts.append(
-            f'<h3 id="{anchor_id}">'
-            "<strong>"
-            "Binance Word of the Day "
-            f"{length} Letters Answers"
-            "</strong>"
-            "</h3>"
-        )
-
-        answers = answer_groups.get(
-            length_key,
-            [],
-        )
-
-        if answers:
-            list_items = [
-                f"<li>{html.escape(str(answer))}</li>"
-                for answer in answers
-            ]
-        else:
-            list_items = [
-                "<li>Updating soon.</li>"
-            ]
-
-        html_parts.append(
-            "<ul>\n"
-            + "\n".join(list_items)
-            + "\n</ul>"
-        )
-
-    return "\n".join(html_parts)
-
 
 def replace_answer_area(
     content_html,
@@ -2800,13 +1990,12 @@ def replace_answer_area(
 
     return str(soup)
 
+
 def update_existing_answer_content(
     content_html,
     game_cfg,
     answer_data,
-    readable_date=None,
-    last_verified_date=None,
-    last_updated_text=None,
+    readable_date,
 ):
     answer_type = answer_data.get(
         "answer_type",
@@ -2814,121 +2003,50 @@ def update_existing_answer_content(
     )
 
     if answer_type == "money_bux_codes":
-        answer_area_html = (
-            build_money_bux_answer_area(
-                codes=answer_data.get(
-                    "codes",
-                    [],
-                ),
-            )
+        answer_area_html = build_money_bux_answer_area(
+            answer_data.get("codes", [])
         )
 
-        return replace_answer_area(
+    elif answer_type == "city_holder":
+        answer_area_html = build_city_holder_answer_area(
+            readable_date=readable_date,
+            combo_lines=answer_data.get("combo_lines", []),
+            quiz_en=answer_data.get("quiz_en", []),
+            quiz_ru=answer_data.get("quiz_ru", []),
+        )
+
+    elif answer_type == "quote_author":
+        answer_area_html = build_quote_author_answer_area(
+            readable_date=readable_date,
+            quote=answer_data.get("quote"),
+            author=answer_data.get("author"),
+        )
+
+    elif answer_type == "hamster_cipher":
+        answer_area_html = build_hamster_cipher_answer_area(
+            readable_date=readable_date,
+            word=answer_data.get("word"),
+            morse_lines=answer_data.get("morse_lines", []),
+            simplified_lines=answer_data.get(
+                "simplified_lines",
+                [],
+            ),
+        )
+
+    else:
+        return update_quiz_answer_block(
             content_html=content_html,
             game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
+            question=answer_data.get("question"),
+            answer=answer_data.get("answer"),
         )
 
-    if answer_type == "city_holder":
-        answer_area_html = (
-            build_city_holder_answer_area(
-                readable_date=readable_date,
-                combo_lines=answer_data.get(
-                    "combo_lines",
-                    [],
-                ),
-                quiz_en=answer_data.get(
-                    "quiz_en",
-                    [],
-                ),
-                quiz_ru=answer_data.get(
-                    "quiz_ru",
-                    [],
-                ),
-            )
-        )
-
-        return replace_answer_area(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
-        )
-
-    if answer_type == "red_packet_codes":
-        answer_area_html = (
-            build_red_packet_answer_area(
-                codes=answer_data.get(
-                    "codes",
-                    [],
-                ),
-                last_updated_text=(
-                    last_updated_text
-                    or "Updating soon."
-                ),
-            )
-        )
-
-        return replace_answer_area(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
-        )
-
-    if answer_type == "quote_author":
-        answer_area_html = (
-            build_quote_author_answer_area(
-                readable_date=readable_date,
-                quote=answer_data.get("quote"),
-                author=answer_data.get("author"),
-            )
-        )
-
-        return replace_answer_area(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
-        )
-
-    if answer_type == "binance_wotd":
-        answer_area_html = build_binance_wotd_answer_area(
-            answer_data=answer_data,
-            last_verified_date=last_verified_date,
-        )
-
-        return replace_answer_area(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
-        )
-
-    if answer_type == "hamster_cipher":
-        answer_area_html = (
-            build_hamster_cipher_answer_area(
-                readable_date=readable_date,
-                word=answer_data.get("word"),
-                morse_lines=answer_data.get(
-                    "morse_lines",
-                    [],
-                ),
-                simplified_lines=answer_data.get(
-                    "simplified_lines",
-                    [],
-                ),
-            )
-        )
-
-        return replace_answer_area(
-            content_html=content_html,
-            game_cfg=game_cfg,
-            answer_area_html=answer_area_html,
-        )
-
-    return update_quiz_answer_block(
+    return replace_answer_area(
         content_html=content_html,
         game_cfg=game_cfg,
-        question=answer_data.get("question"),
-        answer=answer_data.get("answer"),
+        answer_area_html=answer_area_html,
     )
+
 
 def build_content(
     game_cfg,
@@ -2936,340 +2054,122 @@ def build_content(
     date_str,
     answer_data,
     crypto_snapshot_html,
-    readable_date=None,
-    slug_date=None,
-    extra_vars=None,
+    readable_date,
+    slug_date,
 ):
-    """
-    Build toàn bộ content từ template.
-
-    Hỗ trợ:
-    - question_answer
-    - hamster_cipher
-    - binance_wotd
-    - red_packet_codes
-    - city_holder
-    - money_bux_codes
-    """
-
-    # -----------------------------------------------------
-    # 1. Fallback cho game daily cũ
-    # -----------------------------------------------------
-    if readable_date is None:
-        readable_date = target_date_readable(
-            cfg["timezone"]
-        )
-
-    if slug_date is None:
-        slug_date = target_date_slug(
-            cfg["timezone"]
-        )
-
-    # -----------------------------------------------------
-    # 2. Đọc template của game
-    # -----------------------------------------------------
-    template_file = game_cfg["template_file"]
-
     with open(
-        template_file,
+        game_cfg["template_file"],
         "r",
         encoding="utf-8",
-    ) as f:
-        template = f.read()
+    ) as file:
+        content = file.read()
 
-    # -----------------------------------------------------
-    # 3. Thay toàn bộ biến ngày
-    # -----------------------------------------------------
-    content = replace_game_vars(
-        text=template,
-        date_str=date_str,
-        readable_date=readable_date,
-        slug_date=slug_date,
-        extra_vars=extra_vars,
+    content = replace_date_vars(
+        content,
+        date_str,
+        readable_date,
+        slug_date,
     )
 
-    # -----------------------------------------------------
-    # 4. Chèn crypto snapshot
-    # -----------------------------------------------------
     content = content.replace(
         "{{CRYPTO_SNAPSHOT}}",
         crypto_snapshot_html or "",
     )
 
-    # -----------------------------------------------------
-    # 5. Xác định loại answer
-    # -----------------------------------------------------
     answer_type = answer_data.get(
         "answer_type",
-        game_cfg.get(
-            "answer_type",
-            "question_answer",
-        ),
+        game_cfg.get("answer_type", "question_answer"),
     )
 
-    # =====================================================
-    # BINANCE WORD OF THE DAY
-    # =====================================================
-    if answer_type == "binance_wotd":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"Binance WOTD template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        answer_area_html = (
-            build_binance_wotd_answer_area(
-                answer_data=answer_data,
-                last_verified_date=answer_data.get(
-                    "last_verified_date"
-                ),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # MONEY BUX CODES
-    # =====================================================
-    elif answer_type == "money_bux_codes":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"Money Bux template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        answer_area_html = (
-            build_money_bux_answer_area(
-                codes=answer_data.get(
-                    "codes",
-                    [],
-                ),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # CITY HOLDER
-    # =====================================================
-    elif answer_type == "city_holder":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"City Holder template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        answer_area_html = (
-            build_city_holder_answer_area(
-                readable_date=readable_date,
-                combo_lines=answer_data.get(
-                    "combo_lines",
-                    [],
-                ),
-                quiz_en=answer_data.get(
-                    "quiz_en",
-                    [],
-                ),
-                quiz_ru=answer_data.get(
-                    "quiz_ru",
-                    [],
-                ),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # BINANCE RED PACKET CODES
-    # =====================================================
-    elif answer_type == "red_packet_codes":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"Red Packet template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        last_updated_text = (
-            format_datetime_readable(
-                now_local(
-                    cfg["timezone"]
-                )
-            )
-        )
-
-        answer_area_html = (
-            build_red_packet_answer_area(
-                codes=answer_data.get(
-                    "codes",
-                    [],
-                ),
-                last_updated_text=(
-                    last_updated_text
-                ),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # HAMSTER CIPHER
-    # =====================================================
-    elif answer_type == "hamster_cipher":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"Hamster Cipher template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        answer_area_html = (
-            build_hamster_cipher_answer_area(
-                readable_date=readable_date,
-                word=answer_data.get("word"),
-                morse_lines=answer_data.get(
-                    "morse_lines",
-                    [],
-                ),
-                simplified_lines=answer_data.get(
-                    "simplified_lines",
-                    [],
-                ),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # HRUM QUOTE OF THE DAY
-    # =====================================================
-    elif answer_type == "quote_author":
-        placeholder = game_cfg.get(
-            "answer_placeholder",
-            "{{ANSWER_AREA}}",
-        )
-
-        placeholder_count = content.count(
-            placeholder
-        )
-
-        if placeholder_count != 1:
-            raise RuntimeError(
-                f"Hrum template must contain "
-                f"exactly one {placeholder}. "
-                f"Found: {placeholder_count}"
-            )
-
-        answer_area_html = (
-            build_quote_author_answer_area(
-                readable_date=readable_date,
-                quote=answer_data.get("quote"),
-                author=answer_data.get("author"),
-            )
-        )
-
-        content = content.replace(
-            placeholder,
-            answer_area_html,
-            1,
-        )
-
-    # =====================================================
-    # GAME QUESTION / ANSWER THÔNG THƯỜNG
-    # =====================================================
-    elif answer_type == "question_answer":
+    if answer_type == "question_answer":
         content = update_quiz_answer_block(
             content_html=content,
             game_cfg=game_cfg,
-            question=answer_data.get(
-                "question"
+            question=answer_data.get("question"),
+            answer=answer_data.get("answer"),
+        )
+
+    elif answer_type == "money_bux_codes":
+        answer_area_html = build_money_bux_answer_area(
+            answer_data.get("codes", [])
+        )
+        content = replace_template_answer_area(
+            content,
+            game_cfg,
+            answer_area_html,
+        )
+
+    elif answer_type == "city_holder":
+        answer_area_html = build_city_holder_answer_area(
+            readable_date=readable_date,
+            combo_lines=answer_data.get("combo_lines", []),
+            quiz_en=answer_data.get("quiz_en", []),
+            quiz_ru=answer_data.get("quiz_ru", []),
+        )
+        content = replace_template_answer_area(
+            content,
+            game_cfg,
+            answer_area_html,
+        )
+
+    elif answer_type == "quote_author":
+        answer_area_html = build_quote_author_answer_area(
+            readable_date=readable_date,
+            quote=answer_data.get("quote"),
+            author=answer_data.get("author"),
+        )
+        content = replace_template_answer_area(
+            content,
+            game_cfg,
+            answer_area_html,
+        )
+
+    elif answer_type == "hamster_cipher":
+        answer_area_html = build_hamster_cipher_answer_area(
+            readable_date=readable_date,
+            word=answer_data.get("word"),
+            morse_lines=answer_data.get("morse_lines", []),
+            simplified_lines=answer_data.get(
+                "simplified_lines",
+                [],
             ),
-            answer=answer_data.get(
-                "answer"
-            ),
+        )
+        content = replace_template_answer_area(
+            content,
+            game_cfg,
+            answer_area_html,
         )
 
     else:
         raise RuntimeError(
-            f"Unsupported answer_type "
-            f"in build_content: {answer_type}"
+            f"Unsupported answer_type in build_content: {answer_type}"
         )
 
-    # -----------------------------------------------------
-    # 6. Chèn internal links tự động
-    # -----------------------------------------------------
-    return auto_link_html(
-        content,
-        cfg,
+    return auto_link_html(content, cfg)
+
+
+def replace_template_answer_area(
+    content,
+    game_cfg,
+    answer_area_html,
+):
+    placeholder = game_cfg.get(
+        "answer_placeholder",
+        "{{ANSWER_AREA}}",
     )
+
+    if content.count(placeholder) != 1:
+        raise RuntimeError(
+            f"Template for {game_cfg['game_key']} must contain "
+            f"exactly one {placeholder}."
+        )
+
+    return content.replace(
+        placeholder,
+        answer_area_html,
+        1,
+    )
+
 
 def get_tag_ids_for_post_url(
     cfg,
@@ -3333,11 +2233,45 @@ def get_tag_ids_for_post_url(
 
     return matched_tag_ids
 
-def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
-    url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts"
 
-    run_mode = os.getenv("RUN_MODE", "update").lower()
-    featured_media_id = game_cfg.get("featured_media_id") or cfg["wp"].get("featured_media_id")
+def patch_wp_post(cfg, post_id, payload):
+    url = (
+        f"{cfg['wp']['site_url'].rstrip('/')}"
+        f"/wp-json/wp/v2/posts/{post_id}"
+    )
+
+    response = requests.post(
+        url,
+        headers={
+            **wp_headers(cfg),
+            "Content-Type": "application/json",
+        },
+        params={"context": "edit"},
+        json=payload,
+        timeout=120,
+    )
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Post update failed {response.status_code}: "
+            f"{response.text[:2000]}"
+        )
+
+    return response.json()
+
+
+def create_wp_post(
+    cfg,
+    game_cfg,
+    title,
+    slug,
+    content,
+    target_date,
+):
+    url = (
+        f"{cfg['wp']['site_url'].rstrip('/')}"
+        "/wp-json/wp/v2/posts"
+    )
 
     payload = {
         "title": title,
@@ -3351,91 +2285,149 @@ def create_wp_post(cfg, game_cfg, title, slug, content, target_date,):
         ),
     }
 
-    tag_ids = get_tag_ids_for_post_url(
-        cfg=cfg,
-        slug=slug,
-    )
-    
+    tag_ids = get_tag_ids_for_post_url(cfg, slug)
+
     if tag_ids:
         payload["tags"] = tag_ids
-    else:
-        print(
-            "No tag rule matched. "
-            "Post will be created without tags."
-    )
 
-    if run_mode == "create":
-        # Tất cả post mới đều tạo dưới dạng draft.
-        # Chỉ publish khi update job lấy được answer hợp lệ.
-        payload["status"] = "draft"
-    else:
-        payload["status"] = "publish"
+    featured_media_id = (
+        game_cfg.get("featured_media_id")
+        or cfg["wp"].get("featured_media_id")
+    )
 
     if featured_media_id:
         payload["featured_media"] = int(featured_media_id)
 
+    publish_mode, _, _ = get_publish_settings(cfg, game_cfg)
+
+    if publish_mode == "answer":
+        payload["status"] = "draft"
+    else:
+        publish_dt = scheduled_publish_datetime(
+            cfg,
+            game_cfg,
+            target_date,
+        )
+
+        if publish_dt > now_local(cfg["timezone"]):
+            payload["status"] = "future"
+        else:
+            payload["status"] = "publish"
+
+        payload["date"] = publish_dt.isoformat()
+
     print(
-        f"Creating post with tags: "
-        f"{payload.get('tags', [])}"
+        f"Create {game_cfg['game_key']}: "
+        f"publish_mode={publish_mode}, "
+        f"status={payload['status']}, "
+        f"date={payload.get('date')}"
     )
 
-    r = requests.post(
+    response = requests.post(
         url,
-        headers={**wp_headers(cfg), "Content-Type": "application/json"},
+        headers={
+            **wp_headers(cfg),
+            "Content-Type": "application/json",
+        },
         json=payload,
         timeout=120,
     )
 
-    if r.status_code >= 400:
-        raise RuntimeError(f"Post create failed {r.status_code}: {r.text[:2000]}")
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Post create failed {response.status_code}: "
+            f"{response.text[:2000]}"
+        )
 
-    return r.json()
-
-
-def update_wp_post(
-    cfg,
-    post_id,
-    content,
-    publish_now=False,
-):
-    url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts/{post_id}"
-
-    payload = {
-        "content": content,
-    }
-
-    if publish_now:
-        payload["status"] = "publish"
-        payload["date"] = now_local(
-            cfg["timezone"]
-        ).isoformat()
-
-    r = requests.post(
-        url,
-        headers={**wp_headers(cfg), "Content-Type": "application/json"},
-        json=payload,
-        timeout=120,
-    )
-
-    if r.status_code >= 400:
-        raise RuntimeError(f"Post update failed {r.status_code}: {r.text[:2000]}")
-
-    return r.json()
+    return response.json()
 
 
 def get_wp_post(cfg, post_id):
-    url = f"{cfg['wp']['site_url'].rstrip('/')}/wp-json/wp/v2/posts/{post_id}?context=edit"
+    url = (
+        f"{cfg['wp']['site_url'].rstrip('/')}"
+        f"/wp-json/wp/v2/posts/{post_id}?context=edit"
+    )
 
-    r = requests.get(
+    response = requests.get(
         url,
         headers=wp_headers(cfg),
         timeout=60,
     )
 
-    if r.status_code >= 400:
-        raise RuntimeError(f"Post fetch failed {r.status_code}: {r.text[:2000]}")
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Post fetch failed {response.status_code}: "
+            f"{response.text[:2000]}"
+        )
 
-    return r.json()
+    return response.json()
+
+
+def reconcile_publish_state(
+    cfg,
+    game_cfg,
+    post,
+    target_date,
+):
+    publish_mode, _, _ = get_publish_settings(cfg, game_cfg)
+    current_status = str(post.get("status") or "").lower()
+
+    if publish_mode == "answer":
+        if current_status in {"future", "pending"}:
+            updated_post = patch_wp_post(
+                cfg,
+                post["id"],
+                {"status": "draft"},
+            )
+            return updated_post, True, "switched_to_answer_draft"
+
+        return post, False, ""
+
+    publish_dt = scheduled_publish_datetime(
+        cfg,
+        game_cfg,
+        target_date,
+    )
+    desired_status = (
+        "future"
+        if publish_dt > now_local(cfg["timezone"])
+        else "publish"
+    )
+
+    if current_status == "publish":
+        return post, False, ""
+
+    if current_status not in {"draft", "future", "pending"}:
+        return post, False, ""
+
+    if (
+        desired_status == "future"
+        and current_status == "future"
+        and wp_date_matches(
+            post.get("date"),
+            publish_dt,
+            cfg["timezone"],
+        )
+    ):
+        return post, False, ""
+
+    updated_post = patch_wp_post(
+        cfg,
+        post["id"],
+        {
+            "status": desired_status,
+            "date": publish_dt.isoformat(),
+        },
+    )
+
+    label = (
+        "scheduled_future"
+        if desired_status == "future"
+        else "published_scheduled_time_passed"
+    )
+
+    return updated_post, True, label
+
 
 def find_wp_posts_by_slug(
     cfg,
@@ -3538,70 +2530,514 @@ def should_update_answer(current_answer, check_answer):
     return current_answer_norm != check_answer_norm
 
 
-def has_publishable_answer(answer_data):
+def has_answer_data(answer_data):
     answer_type = answer_data.get(
         "answer_type",
         "question_answer",
     )
 
     if answer_type == "city_holder":
-        # Chỉ Combo được phép quyết định publish.
-        # Quiz EN/RU không phải tín hiệu publish.
-        return bool(
-            answer_data.get("combo_lines")
-        )
+        return bool(answer_data.get("has_data"))
 
-    if answer_type in {
-        "money_bux_codes",
-        "red_packet_codes",
-    }:
-        return bool(
-            answer_data.get("codes")
-        )
+    if answer_type == "money_bux_codes":
+        return bool(answer_data.get("codes"))
 
     if answer_type == "quote_author":
-        # Hrum chỉ publish khi đã có đáp án author.
-        return bool(
-            answer_data.get("source_date")
-            and normalize_answer(
-                answer_data.get("author")
-            )
-        )
+        return bool(answer_data.get("has_data"))
 
     if answer_type == "hamster_cipher":
-        word = normalize_answer(
-            answer_data.get("word")
-        ).lower().rstrip(".")
+        word = normalize_answer(answer_data.get("word"))
+        return bool(word and word.lower().rstrip(".") != "updating soon")
 
+    answer = normalize_answer(answer_data.get("answer"))
+    return bool(answer and answer.lower().rstrip(".") != "updating soon")
+
+
+def can_publish_in_answer_mode(answer_data):
+    answer_type = answer_data.get(
+        "answer_type",
+        "question_answer",
+    )
+
+    if answer_type == "city_holder":
+        return bool(answer_data.get("combo_lines"))
+
+    if answer_type == "quote_author":
         return bool(
-            word
-            and word != "updating soon"
+            answer_data.get("source_date")
+            and normalize_answer(answer_data.get("author"))
         )
 
-    if answer_type == "binance_wotd":
-        answer_groups = answer_data.get(
-            "answer_groups",
-            {},
+    return has_answer_data(answer_data)
+
+
+def build_game_identity(game_cfg, target_date):
+    date_str = target_date.isoformat()
+    readable_date = format_date_readable(target_date)
+    slug_date = format_date_slug(target_date)
+
+    title = replace_date_vars(
+        game_cfg["title_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
+
+    slug = normalize_slug(
+        replace_date_vars(
+            game_cfg["slug_format"],
+            date_str,
+            readable_date,
+            slug_date,
+        )
+    )
+
+    seo_title = replace_date_vars(
+        game_cfg["seo_title_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
+
+    meta_description = replace_date_vars(
+        game_cfg["meta_description_format"],
+        date_str,
+        readable_date,
+        slug_date,
+    )
+
+    return {
+        "date_str": date_str,
+        "readable_date": readable_date,
+        "slug_date": slug_date,
+        "title": title,
+        "slug": slug,
+        "seo_title": seo_title,
+        "meta_description": meta_description,
+    }
+
+
+def create_game_post(cfg, ws, game_cfg):
+    game_key = game_cfg["game_key"]
+    target_date = get_target_date(cfg["timezone"])
+    identity = build_game_identity(game_cfg, target_date)
+
+    row_idx, row = find_log_row(
+        ws,
+        identity["date_str"],
+        game_key,
+    )
+
+    if row:
+        post_id = str(row.get("post_id") or "").strip()
+
+        if not post_id:
+            raise RuntimeError(
+                f"Missing post_id in existing Sheet row for {game_key}"
+            )
+
+        post = get_wp_post(cfg, post_id)
+        post, state_changed, state_status = reconcile_publish_state(
+            cfg,
+            game_cfg,
+            post,
+            target_date,
         )
 
-        # Chỉ cần ít nhất một nhóm 3-8 letters
-        # có answer thật là đủ điều kiện publish.
-        return any(
-            bool(answers)
-            for answers in answer_groups.values()
+        if state_changed:
+            update_log_row(
+                ws,
+                row_idx,
+                {
+                    "status": state_status,
+                    "updated_at": now_local(
+                        cfg["timezone"]
+                    ).isoformat(timespec="seconds"),
+                },
+            )
+
+        print(
+            f"Create mode: {game_key} already exists "
+            f"as post {post_id}; no duplicate created."
+        )
+        return
+
+    wp_matches = find_wp_posts_by_slug(
+        cfg,
+        identity["slug"],
+    )
+
+    if len(wp_matches) > 1:
+        raise RuntimeError(
+            f"Multiple WordPress posts found for slug "
+            f"'{identity['slug']}': {wp_matches}"
         )
 
-    if answer_type == "question_answer":
-        answer = normalize_answer(
-            answer_data.get("answer")
-        ).lower().rstrip(".")
+    initial_check_answer = (
+        get_latest_check_answer_for_game(ws, game_key)
+        or game_cfg.get("check_answer", "")
+    )
 
-        return bool(
-            answer
-            and answer != "updating soon"
+    waiting_data = make_waiting_answer_data(game_cfg)
+    timestamp = now_local(cfg["timezone"]).isoformat(
+        timespec="seconds"
+    )
+
+    if wp_matches:
+        post = get_wp_post(cfg, wp_matches[0]["id"])
+        post, _, _ = reconcile_publish_state(
+            cfg,
+            game_cfg,
+            post,
+            target_date,
         )
 
-    return True
+        actual_slug = post.get("slug") or identity["slug"]
+        post_url = (
+            f"{cfg['wp']['site_url'].rstrip('/')}"
+            f"/{actual_slug.strip('/')}/"
+        )
+
+        append_log_row(
+            ws,
+            {
+                "target_date": identity["date_str"],
+                "game_key": game_key,
+                "post_id": post["id"],
+                "post_url": post_url,
+                "slug": actual_slug,
+                "question": waiting_data.get("question", ""),
+                "answer": waiting_data.get("answer", ""),
+                "check_answer": initial_check_answer,
+                "status": f"recovered_existing_{post.get('status', '')}",
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            },
+        )
+
+        print(
+            f"Recovered existing WordPress post {post['id']} "
+            "into Sheet; no duplicate created."
+        )
+        return
+
+    crypto_data = fetch_crypto_data(cfg)
+    crypto_snapshot_html = rewrite_snapshot_with_openai(
+        cfg,
+        game_key,
+        make_base_snapshot(crypto_data),
+    )
+
+    content = build_content(
+        game_cfg=game_cfg,
+        cfg=cfg,
+        date_str=identity["date_str"],
+        answer_data=waiting_data,
+        crypto_snapshot_html=crypto_snapshot_html,
+        readable_date=identity["readable_date"],
+        slug_date=identity["slug_date"],
+    )
+
+    post = create_wp_post(
+        cfg=cfg,
+        game_cfg=game_cfg,
+        title=identity["title"],
+        slug=identity["slug"],
+        content=content,
+        target_date=target_date,
+    )
+
+    update_rankmath_meta(
+        cfg,
+        post["id"],
+        identity["seo_title"],
+        identity["meta_description"],
+    )
+
+    post_url = (
+        f"{cfg['wp']['site_url'].rstrip('/')}"
+        f"/{identity['slug'].strip('/')}/"
+    )
+
+    append_log_row(
+        ws,
+        {
+            "target_date": identity["date_str"],
+            "game_key": game_key,
+            "post_id": post["id"],
+            "post_url": post_url,
+            "slug": identity["slug"],
+            "question": waiting_data.get("question", ""),
+            "answer": waiting_data.get("answer", ""),
+            "check_answer": initial_check_answer,
+            "status": f"created_{post.get('status', 'unknown')}",
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        },
+    )
+
+    print(
+        f"Created {game_key} post {post['id']} "
+        f"with status {post.get('status')}."
+    )
+
+
+def update_game_post(cfg, ws, game_cfg):
+    game_key = game_cfg["game_key"]
+    target_date = get_target_date(cfg["timezone"])
+    readable_date = format_date_readable(target_date)
+    date_str = target_date.isoformat()
+    timestamp = now_local(cfg["timezone"]).isoformat(
+        timespec="seconds"
+    )
+
+    source = fetch_source_page(game_cfg["source_api_url"])
+    source_modified = (
+        source.get("modified")
+        or source.get("date")
+        or ""
+    )
+    source_modified_gmt = source.get("modified_gmt") or ""
+    source_content = source.get("content", {}).get("rendered", "")
+
+    answer_data = extract_game_answer_data(
+        source_content,
+        game_cfg,
+        cfg,
+    )
+
+    source_matches_target = source_modified_matches_target(
+        source_modified,
+        cfg["timezone"],
+        target_date,
+    )
+    day_difference = 0
+
+    if answer_data.get("answer_type") == "city_holder":
+        source_local = parse_wp_datetime_gmt(
+            source_modified_gmt,
+            cfg["timezone"],
+        ) or parse_wp_datetime_local(
+            source_modified,
+            cfg["timezone"],
+        )
+
+        tolerance_days = int(
+            game_cfg.get("source_date_tolerance_days", 1)
+        )
+
+        if source_local:
+            day_difference = (
+                source_local.date() - target_date
+            ).days
+            source_matches_target = (
+                abs(day_difference) <= tolerance_days
+            )
+        else:
+            source_matches_target = False
+
+        if source_modified_gmt:
+            source_modified = source_modified_gmt
+
+    if game_cfg.get("use_content_date", False):
+        source_matches_target = (
+            answer_data.get("source_date") == target_date
+        )
+
+    if answer_data.get("answer_type") == "quote_author":
+        source_date = answer_data.get("source_date")
+        today_date = now_local(cfg["timezone"]).date()
+        yesterday_date = today_date - timedelta(days=1)
+
+        if (
+            not source_date
+            or not answer_data.get("has_data")
+            or source_date not in {today_date, yesterday_date}
+        ):
+            print(
+                f"Hrum source date/data invalid: {source_date}. Skip."
+            )
+            return
+
+        target_date = source_date
+        date_str = source_date.isoformat()
+        readable_date = format_date_readable(source_date)
+        source_matches_target = True
+
+    row_idx, row = find_log_row(ws, date_str, game_key)
+
+    if not row:
+        print(
+            f"Update mode: no Sheet row for {game_key} {date_str}. Skip."
+        )
+        return
+
+    post_id = str(row.get("post_id") or "").strip()
+
+    if not post_id:
+        raise RuntimeError(
+            f"Missing post_id in Sheet for {game_key} {date_str}"
+        )
+
+    post = get_wp_post(cfg, post_id)
+    post, state_changed, state_status = reconcile_publish_state(
+        cfg,
+        game_cfg,
+        post,
+        target_date,
+    )
+
+    if not source_matches_target:
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": state_status or "checked_source_not_target_date",
+                "updated_at": timestamp,
+            },
+        )
+        print(
+            f"{game_key}: source is not for target {date_str}. Skip content."
+        )
+        return
+
+    if not has_answer_data(answer_data):
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": state_status or "checked_no_answer_data",
+                "updated_at": timestamp,
+            },
+        )
+        print(f"{game_key}: no usable answer data. Skip content.")
+        return
+
+    current_check_value = answer_data.get("check_value", "")
+    sheet_check_answer = row.get("check_answer") or ""
+    answer_changed = should_update_answer(
+        current_check_value,
+        sheet_check_answer,
+    )
+
+    row_answer_norm = normalize_answer(
+        row.get("answer") or ""
+    ).lower().rstrip(".")
+    row_is_waiting = row_answer_norm in {"", "updating soon"}
+
+    if not answer_changed and not row_is_waiting:
+        update_log_row(
+            ws,
+            row_idx,
+            {
+                "source_modified": source_modified,
+                "status": state_status or "checked_no_new_answer",
+                "updated_at": timestamp,
+            },
+        )
+        print(f"{game_key}: answer unchanged.")
+        return
+
+    existing_content = (
+        post.get("content", {}).get("raw")
+        or post.get("content", {}).get("rendered", "")
+    )
+
+    if not existing_content:
+        raise RuntimeError(
+            f"Empty WordPress content for post {post_id}"
+        )
+
+    render_data = answer_data
+    answer_publish_allowed = can_publish_in_answer_mode(answer_data)
+
+    if answer_data.get("answer_type") == "city_holder":
+        combo_is_new = True
+
+        if day_difference != 0:
+            current_combo_check = answer_data.get(
+                "combo_check_value",
+                "",
+            )
+            previous_combo_check = get_latest_city_combo_signature(
+                ws,
+                game_key,
+                exclude_target_date=date_str,
+            )
+            combo_is_new = bool(
+                current_combo_check
+                and previous_combo_check
+                and current_combo_check != previous_combo_check
+            )
+
+        if not combo_is_new:
+            current_city_data = extract_city_holder_data(
+                existing_content,
+                log_result=False,
+            )
+            render_data = answer_data.copy()
+            render_data["combo_lines"] = current_city_data.get(
+                "combo_lines",
+                [],
+            )
+
+        answer_publish_allowed = bool(
+            answer_data.get("combo_lines")
+            and combo_is_new
+        )
+
+    updated_content = update_existing_answer_content(
+        content_html=existing_content,
+        game_cfg=game_cfg,
+        answer_data=render_data,
+        readable_date=readable_date,
+    )
+    updated_content = auto_link_html(updated_content, cfg)
+
+    publish_mode, _, _ = get_publish_settings(cfg, game_cfg)
+    publish_now = bool(
+        publish_mode == "answer"
+        and answer_publish_allowed
+        and str(post.get("status") or "").lower()
+        in {"draft", "future", "pending"}
+    )
+
+    payload = {"content": updated_content}
+
+    if publish_now:
+        payload.update(
+            {
+                "status": "publish",
+                "date": now_local(cfg["timezone"]).isoformat(),
+            }
+        )
+
+    updated_post = patch_wp_post(cfg, post_id, payload)
+    final_status = (
+        "published_with_new_answer"
+        if publish_now
+        else "updated_with_new_answer"
+    )
+
+    update_log_row(
+        ws,
+        row_idx,
+        {
+            "source_modified": source_modified,
+            "question": answer_data.get("question", ""),
+            "answer": answer_data.get("answer", ""),
+            "check_answer": current_check_value,
+            "status": final_status,
+            "updated_at": timestamp,
+        },
+    )
+
+    print(
+        f"{game_key}: post {updated_post.get('id')} updated; "
+        f"status={updated_post.get('status')}."
+    )
 
 
 def process_game(cfg, ws, game_cfg):
@@ -3613,1334 +3049,17 @@ def process_game(cfg, ws, game_cfg):
         print(f"Skip game by run_times: {game_cfg['game_key']}")
         return
 
-    game_key = game_cfg["game_key"]
-    run_mode = os.getenv(
-        "RUN_MODE",
-        "update",
-    ).lower()
-    # date_str = target_date_str(cfg["timezone"])
-    # readable_date = target_date_readable(cfg["timezone"])
-    # slug_date = target_date_slug(cfg["timezone"])
-    target_date_obj = get_game_target_date(
-        cfg["timezone"],
-        game_cfg,
-    )
-    
-    date_str = target_date_obj.isoformat()
-    readable_date = format_date_readable(
-        target_date_obj
-    )
-    slug_date = format_date_slug(
-        target_date_obj
-    )
-    
-    post_cycle = game_cfg.get(
-        "post_cycle",
-        "daily",
-    )
-    
-    campaign_start = None
-    campaign_end = None
-    extra_vars = {}
-    
-    if post_cycle == "weekly":
-        campaign_start, campaign_end = (
-            get_week_campaign_dates(
-                target_date_obj
-            )
-        )
-    
-        extra_vars = {
-            "CAMPAIGN_START_DATE": (
-                campaign_start.isoformat()
-            ),
-            "CAMPAIGN_END_DATE": (
-                campaign_end.isoformat()
-            ),
-            "CAMPAIGN_DATE_READABLE": (
-                format_date_range_readable(
-                    campaign_start,
-                    campaign_end,
-                )
-            ),
-            "CAMPAIGN_DATE_SLUG": (
-                format_date_range_slug(
-                    campaign_start,
-                    campaign_end,
-                )
-            ),
-        }
-    timestamp = now_local(cfg["timezone"]).isoformat(timespec="seconds")
+    run_mode = os.getenv("RUN_MODE", "update").lower()
 
-    # title = replace_date_vars(game_cfg["title_format"], date_str, readable_date)
-    # slug = normalize_slug(replace_date_vars(game_cfg["slug_format"], date_str, readable_date))
-    # seo_title = replace_date_vars(game_cfg["seo_title_format"], date_str, readable_date)
-    # meta_description = replace_date_vars(game_cfg["meta_description_format"], date_str, readable_date)
-
-    title = replace_game_vars(
-        text=game_cfg["title_format"],
-        date_str=date_str,
-        readable_date=readable_date,
-        slug_date=slug_date,
-        extra_vars=extra_vars,
-    )
-    
-    slug = normalize_slug(
-        replace_game_vars(
-            text=game_cfg["slug_format"],
-            date_str=date_str,
-            readable_date=readable_date,
-            slug_date=slug_date,
-            extra_vars=extra_vars,
-        )
-    )
-    
-    seo_title = replace_game_vars(
-        text=game_cfg["seo_title_format"],
-        date_str=date_str,
-        readable_date=readable_date,
-        slug_date=slug_date,
-        extra_vars=extra_vars,
-    )
-    
-    meta_description = replace_game_vars(
-        text=game_cfg["meta_description_format"],
-        date_str=date_str,
-        readable_date=readable_date,
-        slug_date=slug_date,
-        extra_vars=extra_vars,
-    )
-    
-    print(f"Processing {game_key} for {date_str}")
-
-    # source = fetch_source_page(game_cfg["source_api_url"])
-    # source_modified = source.get("modified") or source.get("date") or ""
-    
-    # source_is_today_target = is_source_for_target_date(
-    #     source_modified,
-    #     cfg["timezone"],
-    # )
-
-    source = fetch_source_page(
-        game_cfg["source_api_url"]
-    )
-
-    source_modified = (
-        source.get("modified")
-        or source.get("date")
-        or ""
-    )
-
-    source_modified_gmt = (
-        source.get("modified_gmt")
-        or ""
-    )
-
-    source_is_today_target = (
-        is_source_for_target_date(
-            source_modified,
-            cfg["timezone"],
-        )
-    )
-
-    # =====================================================
-    # CITY HOLDER:
-    # modified_gmt được hiểu là UTC,
-    # sau đó đổi sang giờ Việt Nam và so sánh đúng ngày.
-    # =====================================================
-    if (
-        game_cfg.get("answer_type")
-        == "city_holder"
-    ):
-        source_modified_local = (
-            parse_wp_datetime_gmt(
-                source_modified_gmt,
-                cfg["timezone"],
-            )
-        )
-
-        # Fallback nếu API không có modified_gmt.
-        if not source_modified_local:
-            source_modified_local = (
-                parse_wp_datetime_local(
-                    source_modified,
-                    cfg["timezone"],
-                )
-            )
-
-        if source_modified_local:
-            source_date_local = (
-                source_modified_local.date()
-            )
-        
-            day_difference = (
-                source_date_local
-                - target_date_obj
-            ).days
-        
-            if run_mode == "update":
-                # Update được phép lệch sớm/chậm 1 ngày.
-                source_is_today_target = (
-                    abs(day_difference) <= 1
-                )
-            else:
-                # Create chỉ lấy đáp án nếu source
-                # thực sự thuộc đúng ngày target.
-                source_is_today_target = (
-                    day_difference == 0
-                )
-        else:
-            source_date_local = None
-            day_difference = None
-            source_is_today_target = False
-
-        # Lưu modified_gmt vào Sheet nếu có.
-        if source_modified_gmt:
-            source_modified = (
-                source_modified_gmt
-            )
-
-        print(
-            "City Holder modified local: "
-            f"{source_modified_local}"
-        )
-
-        print(
-            "City Holder source matches target: "
-            f"{source_is_today_target}"
-        )
-    
-    source_content = source.get("content", {}).get("rendered", "")
-
-    # question, answer = extract_question_answer(source_content, game_cfg, cfg)
-
-    answer_data = extract_game_answer_data(
-        content_html=source_content,
-        game_cfg=game_cfg,
-        cfg=cfg,
-    )
-    
-    question = answer_data.get(
-        "question",
-        "",
-    )
-    
-    answer = answer_data.get(
-        "answer",
-        "",
-    )
-    
-    current_check_value = answer_data.get(
-        "check_value",
-        "",
-    )
-
-    # =====================================================
-    # GENERIC DAILY GAME:
-    # Nếu config yêu cầu dùng Date trong HTML source,
-    # ưu tiên Date này thay vì modified time.
-    # =====================================================
-
-    content_source_date = answer_data.get(
-        "source_date"
-    )
-
-    if (
-        run_mode == "update"
-        and game_cfg.get(
-            "use_content_date",
-            False,
-        )
-    ):
-        source_is_today_target = (
-            content_source_date
-            == target_date_obj
-        )
-
-        print(
-            f"{game_key} content source date: "
-            f"{content_source_date}"
-        )
-
-        print(
-            f"{game_key} content date matches target: "
-            f"{source_is_today_target}"
-        )
-
-    # =====================================================
-    # HRUM: UPDATE THEO DATE TRONG SOURCE
-    # =====================================================
-    if (
-        answer_data.get("answer_type")
-        == "quote_author"
-    ):
-        hrum_source_date = answer_data.get(
-            "source_date"
-        )
-
-        hrum_has_data = answer_data.get(
-            "has_data",
-            False,
-        )
-
-        # Trong create mode vẫn giữ target ngày mai.
-        # Chỉ update mode mới dùng Date trong source.
-        if run_mode == "update":
-            if not hrum_source_date:
-                print(
-                    "Hrum source date not found. Skip."
-                )
-                return
-
-            if not hrum_has_data:
-                print(
-                    "Hrum source has no quote "
-                    "or author yet. Skip."
-                )
-                return
-
-            today_date = now_local(
-                cfg["timezone"]
-            ).date()
-
-            yesterday_date = (
-                today_date
-                - timedelta(days=1)
-            )
-
-            # Chỉ chấp nhận source của hôm nay
-            # hoặc hôm qua. Tránh source quá cũ
-            # update nhầm một post cũ.
-            if hrum_source_date not in {
-                today_date,
-                yesterday_date,
-            }:
-                print(
-                    "Hrum source date is too old "
-                    "or invalid. Skip."
-                )
-                print(
-                    f"Hrum source date: "
-                    f"{hrum_source_date}"
-                )
-                print(
-                    f"Allowed dates: "
-                    f"{yesterday_date}, "
-                    f"{today_date}"
-                )
-                return
-
-            # Dùng Date trong HTML để tìm đúng row.
-            target_date_obj = hrum_source_date
-            date_str = target_date_obj.isoformat()
-
-            readable_date = format_date_readable(
-                target_date_obj
-            )
-
-            slug_date = format_date_slug(
-                target_date_obj
-            )
-
-            print(
-                "Hrum update target overridden "
-                "by source Date."
-            )
-
-            print(
-                f"Hrum source target: "
-                f"{date_str}"
-            )
-
-        # Create:
-        # source date phải bằng target ngày mai
-        # thì mới dùng đáp án ngay.
-        #
-        # Update:
-        # target đã được đổi thành source date.
-        source_is_today_target = bool(
-            hrum_source_date
-            and hrum_has_data
-            and hrum_source_date
-            == target_date_obj
-        )
-
-    source_matches_target_week = False
-
-    if post_cycle == "weekly":
-        source_campaign_start = answer_data.get(
-            "campaign_start"
-        )
-        source_campaign_end = answer_data.get(
-            "campaign_end"
-        )
-    
-        source_matches_target_week = (
-            source_campaign_start == campaign_start
-            and source_campaign_end == campaign_end
-        )
-    
-    print(
-        f"Extracted answer type: "
-        f"{answer_data.get('answer_type')}"
-    )
-    print(f"Extracted check value: {current_check_value}")
-
-    row_idx, row = find_log_row(ws, date_str, game_key)
-
-    # run_mode = os.getenv("RUN_MODE", "update").lower()
-
-    if run_mode == "create" and row:
-        print("Create mode: log already exists, skip.")
-        return
-    
-    if run_mode == "update" and not row:
-        print("Update mode: today's post log not found, skip.")
+    if run_mode == "create":
+        create_game_post(cfg, ws, game_cfg)
         return
 
-    # =====================================================
-    # CREATE DUPLICATE GUARD:
-    # Sheet không có row thì check tiếp WordPress.
-    # =====================================================
-    if (
-        run_mode == "create"
-        and not row
-    ):
-        wp_matches = find_wp_posts_by_slug(
-            cfg=cfg,
-            slug=slug,
-        )
-    
-        if len(wp_matches) > 1:
-            duplicate_info = [
-                {
-                    "id": post.get("id"),
-                    "status": post.get("status"),
-                    "slug": post.get("slug"),
-                }
-                for post in wp_matches
-            ]
-    
-            raise RuntimeError(
-                "Multiple WordPress posts found "
-                f"for slug '{slug}': "
-                f"{duplicate_info}"
-            )
-    
-        if len(wp_matches) == 1:
-            existing_wp_post = wp_matches[0]
-    
-            existing_post_id = (
-                existing_wp_post["id"]
-            )
-    
-            existing_status = (
-                existing_wp_post.get(
-                    "status",
-                    "",
-                )
-            )
-    
-            actual_slug = (
-                existing_wp_post.get("slug")
-                or slug
-            )
-    
-            print(
-                "WordPress post already exists."
-            )
-    
-            print(
-                f"Existing ID: "
-                f"{existing_post_id}"
-            )
-    
-            print(
-                f"Existing status: "
-                f"{existing_status}"
-            )
-    
-            print(
-                f"Existing slug: "
-                f"{actual_slug}"
-            )
-
-            # =============================================
-            # Rebuild Sheet row
-            # =============================================
-        
-            if post_cycle == "weekly":
-                recovered_data = (
-                    make_waiting_answer_data(
-                        game_cfg=game_cfg,
-                        campaign_start=campaign_start,
-                        campaign_end=campaign_end,
-                    )
-                )
-        
-                recovered_check_answer = ""
-                recovered_verified_date = ""
-        
-            else:
-                latest_sheet_check_answer = (
-                    get_latest_check_answer_for_game(
-                        ws,
-                        game_key,
-                    )
-                )
-        
-                recovered_check_answer = (
-                    latest_sheet_check_answer
-                    or game_cfg.get(
-                        "check_answer",
-                        "",
-                    )
-                )
-        
-                recovered_data = (
-                    make_waiting_answer_data(
-                        game_cfg
-                    )
-                )
-        
-                recovered_verified_date = ""
-        
-            recovered_post_url = (
-                f"{cfg['wp']['site_url'].rstrip('/')}/"
-                f"{actual_slug.strip('/')}/"
-            )
-        
-            append_log_row(
-                ws,
-                {
-                    "target_date": date_str,
-                    "game_key": game_key,
-                    "post_id": existing_post_id,
-                    "post_url": recovered_post_url,
-                    "slug": actual_slug,
-                    "source_modified": (
-                        source_modified
-                    ),
-                    "question": recovered_data.get(
-                        "question",
-                        "",
-                    ),
-                    "answer": recovered_data.get(
-                        "answer",
-                        "",
-                    ),
-                    "check_answer": (
-                        recovered_check_answer
-                    ),
-                    "verified_date": (
-                        recovered_verified_date
-                    ),
-                    "status": (
-                        "recovered_existing_wp_post"
-                    ),
-                    "created_at": timestamp,
-                    "updated_at": timestamp,
-                },
-            )
-        
-            print(
-                "Recovered missing Sheet row. "
-                "No new WordPress post created."
-            )
-        
-            return
-
-    # City Holder:
-    # Nếu cả Combo, Quiz EN và Quiz RU đều chưa có,
-    # không update lại bài thành toàn bộ Updating soon.
-    if (
-        run_mode == "update"
-        and answer_data.get("answer_type")
-        == "city_holder"
-        and not answer_data.get("has_data")
-    ):
-        print(
-            "City Holder source has no real "
-            "answer data yet. Skip."
-        )
-
-        update_log_row(
-            ws,
-            row_idx,
-            {
-                "source_modified": source_modified,
-                "status": (
-                    "checked_city_holder_no_data"
-                ),
-                "updated_at": timestamp,
-            },
-        )
-
+    if run_mode == "update":
+        update_game_post(cfg, ws, game_cfg)
         return
 
-    # Money Bux:
-    # Nếu source tạm thời không lấy được code,
-    # giữ nguyên nội dung WordPress hiện tại.
-    if (
-        run_mode == "update"
-        and answer_data.get("answer_type")
-        == "money_bux_codes"
-        and not answer_data.get("codes")
-    ):
-        print(
-            "No Money Bux codes found "
-            "in source. Skip update."
-        )
-
-        update_log_row(
-            ws,
-            row_idx,
-            {
-                "source_modified": source_modified,
-                "status": (
-                    "checked_no_money_bux_codes"
-                ),
-                "updated_at": timestamp,
-            },
-        )
-
-        return
-
-    # Red Packet:
-    # Không update nếu source chưa lấy được code nào.
-    # Chỉ áp dụng riêng cho game này.
-    if (
-        run_mode == "update"
-        and answer_data.get("answer_type")
-        == "red_packet_codes"
-        and not answer_data.get("codes")
-    ):
-        print(
-            "No Red Packet codes found "
-            "in source. Skip update."
-        )
-
-        update_log_row(
-            ws,
-            row_idx,
-            {
-                "source_modified": source_modified,
-                "status": (
-                    "checked_no_red_packet_codes"
-                ),
-                "updated_at": timestamp,
-            },
-        )
-
-        return
-
-    if not row:
-        print("No sheet log found. First run for this game/date.")
-    
-        # =========================================================
-        # WEEKLY GAME CREATE
-        # =========================================================
-        if post_cycle == "weekly":
-            # Weekly cũng luôn create dưới dạng draft/waiting.
-            # Update job sẽ publish khi campaign đúng
-            # và source có ít nhất một answer thật.
-            publish_data = make_waiting_answer_data(
-                game_cfg=game_cfg,
-                campaign_start=campaign_start,
-                campaign_end=campaign_end,
-            )
-
-            publish_data["last_verified_date"] = None
-
-            new_check_answer = ""
-            verified_date = ""
-            log_status = "created_draft_waiting_weekly_answer"
-    
-            crypto_data = fetch_crypto_data(cfg)
-            base_snapshot = make_base_snapshot(crypto_data)
-    
-            crypto_snapshot_html = rewrite_snapshot_with_openai(
-                cfg,
-                game_key,
-                base_snapshot,
-            )
-    
-            content = build_content(
-                game_cfg=game_cfg,
-                cfg=cfg,
-                date_str=date_str,
-                answer_data=publish_data,
-                crypto_snapshot_html=crypto_snapshot_html,
-                readable_date=readable_date,
-                slug_date=slug_date,
-                extra_vars=extra_vars,
-            )
-    
-            post = create_wp_post(
-                cfg=cfg,
-                game_cfg=game_cfg,
-                title=title,
-                slug=slug,
-                content=content,
-                target_date=target_date_obj,
-            )
-    
-            post_id = post["id"]
-            
-            post_url = (
-                f"{cfg['wp']['site_url'].rstrip('/')}/"
-                f"{slug.strip('/')}/"
-            )
-    
-            update_rankmath_meta(
-                cfg,
-                post_id,
-                seo_title,
-                meta_description,
-            )
-    
-            append_log_row(ws, {
-                "target_date": date_str,
-                "game_key": game_key,
-                "post_id": post_id,
-                "post_url": post_url,
-                "slug": slug,
-                "source_modified": source_modified,
-                "question": publish_data.get(
-                    "question",
-                    "",
-                ),
-                "answer": publish_data.get(
-                    "answer",
-                    "",
-                ),
-                "check_answer": new_check_answer,
-                "verified_date": verified_date,
-                "status": log_status,
-                "created_at": timestamp,
-                "updated_at": timestamp,
-            })
-    
-            print(
-                f"Created weekly post {post_id}: "
-                f"{post_url}"
-            )
-            print(f"Status: {log_status}")
-            return
-    
-        # =========================================================
-        # DAILY GAME CREATE
-        # =========================================================
-        latest_sheet_check_answer = (
-            get_latest_check_answer_for_game(
-                ws,
-                game_key,
-            )
-        )
-    
-        initial_check_answer = (
-            latest_sheet_check_answer
-            or game_cfg.get("check_answer", "")
-        )
-    
-        crypto_data = fetch_crypto_data(cfg)
-        base_snapshot = make_base_snapshot(crypto_data)
-    
-        crypto_snapshot_html = rewrite_snapshot_with_openai(
-            cfg,
-            game_key,
-            base_snapshot,
-        )
-
-        # Daily posts luôn được create dưới dạng draft
-        # với answer area ở trạng thái waiting.
-        # Update job sẽ publish khi có dữ liệu hợp lệ.
-        publish_data = make_waiting_answer_data(
-            game_cfg
-        )
-        log_status = "created_draft_waiting_answer"
-        new_check_answer = initial_check_answer
-    
-        # Phần này phải nằm ngoài else phía trên.
-        content = build_content(
-            game_cfg=game_cfg,
-            cfg=cfg,
-            date_str=date_str,
-            answer_data=publish_data,
-            crypto_snapshot_html=crypto_snapshot_html,
-            readable_date=readable_date,
-            slug_date=slug_date,
-            extra_vars=extra_vars,
-        )
-    
-        post = create_wp_post(
-            cfg=cfg,
-            game_cfg=game_cfg,
-            title=title,
-            slug=slug,
-            content=content,
-            target_date=target_date_obj,
-        )
-    
-        post_id = post["id"]
-        
-        post_url = (
-            f"{cfg['wp']['site_url'].rstrip('/')}/"
-            f"{slug.strip('/')}/"
-        )
-    
-        update_rankmath_meta(
-            cfg,
-            post_id,
-            seo_title,
-            meta_description,
-        )
-    
-        append_log_row(ws, {
-            "target_date": date_str,
-            "game_key": game_key,
-            "post_id": post_id,
-            "post_url": post_url,
-            "slug": slug,
-            "source_modified": source_modified,
-            "question": publish_data.get(
-                "question",
-                "",
-            ),
-            "answer": publish_data.get(
-                "answer",
-                "",
-            ),
-            "check_answer": new_check_answer,
-            "verified_date": "",
-            "status": log_status,
-            "created_at": timestamp,
-            "updated_at": timestamp,
-        })
-    
-        print(f"Created post {post_id}: {post_url}")
-        print(f"Status: {log_status}")
-        return
-
-    print("Sheet log exists. Checking answer against check_answer from log.")
-    
-    post_id = str(row.get("post_id") or "").strip()
-    
-    if not post_id:
-        raise RuntimeError(
-            f"Missing post_id in sheet for {game_key} {date_str}"
-        )
-        
-    # =========================================================
-    # WEEKLY GAME UPDATE
-    # =========================================================
-    if post_cycle == "weekly":
-        print(
-            f"Weekly update mode: checking {game_key} "
-            f"for campaign {campaign_start} to {campaign_end}"
-        )
-    
-        # -----------------------------------------------------
-        # 1. Kiểm tra source MiningCombo có đúng tuần hay không
-        # -----------------------------------------------------
-        if not source_matches_target_week:
-            source_campaign_start = answer_data.get(
-                "campaign_start"
-            )
-    
-            source_campaign_end = answer_data.get(
-                "campaign_end"
-            )
-    
-            print(
-                "Weekly source campaign does not match "
-                "the current target week."
-            )
-    
-            print(
-                f"Expected campaign: "
-                f"{campaign_start} to {campaign_end}"
-            )
-    
-            print(
-                f"Source campaign: "
-                f"{source_campaign_start} to "
-                f"{source_campaign_end}"
-            )
-    
-            update_log_row(
-                ws,
-                row_idx,
-                {
-                    "source_modified": source_modified,
-                    "status": "checked_weekly_source_mismatch",
-                    "updated_at": timestamp,
-                },
-            )
-    
-            return
-
-        # -----------------------------------------------------
-        # 2. Chỉ publish khi source có ít nhất một answer thật
-        # -----------------------------------------------------
-        publishable_answer = has_publishable_answer(
-            answer_data
-        )
-
-        if not publishable_answer:
-            print(
-                "Weekly source matches campaign "
-                "but has no publishable answers yet. "
-                "Keep post as draft."
-            )
-
-            update_log_row(
-                ws,
-                row_idx,
-                {
-                    "source_modified": source_modified,
-                    "status": (
-                        "checked_weekly_waiting_answer"
-                    ),
-                    "updated_at": timestamp,
-                },
-            )
-
-            return
-    
-        # -----------------------------------------------------
-        # 3. Lấy ngày hiện tại để cập nhật Last Verified
-        # -----------------------------------------------------
-        today_date = now_local(
-            cfg["timezone"]
-        ).date()
-    
-        today_str = today_date.isoformat()
-    
-        # -----------------------------------------------------
-        # 3. Đọc dữ liệu hiện tại trong Google Sheet
-        # -----------------------------------------------------
-        sheet_check_answer = str(
-            row.get("check_answer")
-            or ""
-        ).strip()
-    
-        sheet_source_modified = str(
-            row.get("source_modified")
-            or ""
-        ).strip()
-    
-        sheet_verified_date = str(
-            row.get("verified_date")
-            or ""
-        ).strip()
-
-        existing_post = get_wp_post(
-            cfg,
-            post_id,
-        )
-
-        existing_status = str(
-            existing_post.get("status")
-            or ""
-        ).lower()
-
-        publish_now = existing_status in {
-            "draft",
-            "future",
-            "pending",
-        }
-
-        print(
-            f"Weekly WordPress status: "
-            f"{existing_status}"
-        )
-
-        print(
-            f"Weekly publish now: "
-            f"{publish_now}"
-        )
-    
-        # -----------------------------------------------------
-        # 4. Kiểm tra lý do cần update
-        # -----------------------------------------------------
-    
-        # Theme, reward hoặc answer groups có thay đổi.
-        signature_changed = (
-            current_check_value
-            != sheet_check_answer
-        )
-    
-        # MiningCombo modified lại page.
-        source_modified_changed = (
-            str(source_modified).strip()
-            != sheet_source_modified
-        )
-    
-        # Hôm nay bài chưa được cập nhật Last Verified.
-        not_verified_today = (
-            sheet_verified_date
-            != today_str
-        )
-    
-        print(
-            f"Weekly signature changed: "
-            f"{signature_changed}"
-        )
-    
-        print(
-            f"Weekly source_modified changed: "
-            f"{source_modified_changed}"
-        )
-    
-        print(
-            f"Weekly verified today: "
-            f"{not not_verified_today}"
-        )
-    
-        # -----------------------------------------------------
-        # 5. Nếu hôm nay đã verify và source không đổi thì skip
-        # -----------------------------------------------------
-        if (
-            not signature_changed
-            and not source_modified_changed
-            and not not_verified_today
-            and not publish_now
-        ):
-            print(
-                "Weekly post already verified today "
-                "and source has not changed. Skip."
-            )
-    
-            update_log_row(
-                ws,
-                row_idx,
-                {
-                    "status": "checked_weekly_no_change",
-                    "updated_at": timestamp,
-                },
-            )
-    
-            return
-    
-        # -----------------------------------------------------
-        # 6. Lấy nội dung bài WordPress hiện tại
-        # -----------------------------------------------------
-        print(
-            "Weekly data requires an update. "
-            "Fetching existing WordPress post."
-        )
-    
-        existing_content = (
-            existing_post.get(
-                "content",
-                {},
-            ).get("raw")
-            or existing_post.get(
-                "content",
-                {},
-            ).get("rendered", "")
-        )
-    
-        if not existing_content:
-            raise RuntimeError(
-                f"Empty WordPress content for post {post_id}"
-            )
-    
-        # -----------------------------------------------------
-        # 7. Tạo lại toàn bộ ANSWER_AREA
-        # -----------------------------------------------------
-        updated_content = update_existing_answer_content(
-            content_html=existing_content,
-            game_cfg=game_cfg,
-            answer_data=answer_data,
-            readable_date=readable_date,
-            last_verified_date=today_date,
-        )
-    
-        # -----------------------------------------------------
-        # 8. Chạy lại auto-link
-        # -----------------------------------------------------
-        updated_content = auto_link_html(
-            updated_content,
-            cfg,
-        )
-    
-        # -----------------------------------------------------
-        # 9. Gửi nội dung mới lên WordPress
-        # -----------------------------------------------------
-        update_wp_post(
-            cfg,
-            post_id,
-            updated_content,
-            publish_now=publish_now,
-        )
-
-        if publish_now:
-            final_status = "published_weekly_wotd"
-        else:
-            final_status = "updated_weekly_wotd"
-    
-        # -----------------------------------------------------
-        # 10. Update Google Sheet
-        # -----------------------------------------------------
-        update_log_row(
-            ws,
-            row_idx,
-            {
-                "source_modified": source_modified,
-                "question": answer_data.get(
-                    "question",
-                    "",
-                ),
-                "answer": answer_data.get(
-                    "answer",
-                    "",
-                ),
-                "check_answer": current_check_value,
-                "verified_date": today_str,
-                "status": final_status,
-                "updated_at": timestamp,
-            },
-        )
-    
-        print(
-            f"Updated weekly WordPress post {post_id}"
-        )
-    
-        print(
-            f"Weekly campaign: "
-            f"{campaign_start} to {campaign_end}"
-        )
-    
-        print(
-            f"Last Verified: "
-            f"{format_date_readable(today_date)}"
-        )
-    
-        print(
-            f"Status: {final_status}"
-        )
-    
-        return
-    
-    # =========================================================
-    # DAILY GAME UPDATE
-    # =========================================================
-    sheet_check_answer = row.get("check_answer") or ""
-    
-    answer_changed = should_update_answer(
-        current_check_value,
-        sheet_check_answer,
-    )
-    
-    row_answer_norm = normalize_answer(
-        row.get("answer") or ""
-    ).lower().rstrip(".")
-    
-    row_is_waiting = row_answer_norm in {
-        "",
-        "updating soon",
-    }
-
-    # if not answer_changed:
-    #     print("Answer unchanged. No post update needed.")
-
-    #     update_log_row(ws, row_idx, {
-    #         "source_modified": source_modified,
-    #         "status": "checked_no_new_answer",
-    #         "updated_at": timestamp,
-    #     })
-
-    #     return
-
-    if not source_is_today_target:
-        print("Source content is not updated for target date yet. Skip.")
-        update_log_row(ws, row_idx, {
-            "source_modified": source_modified,
-            "status": "checked_source_not_target_date",
-            "updated_at": timestamp,
-        })
-        return
-
-    publishable_answer = has_publishable_answer(
-        answer_data
-    )
-
-    # Draft chưa có dữ liệu thật thì tuyệt đối không publish.
-    if row_is_waiting and not publishable_answer:
-        print(
-            "No publishable answer yet. "
-            "Keep post as draft."
-        )
-        update_log_row(ws, row_idx, {
-            "source_modified": source_modified,
-            "status": "checked_draft_waiting_answer",
-            "updated_at": timestamp,
-        })
-        return
-
-    # City Holder cho phép source lệch +/-1 ngày khi update.
-    # Nếu post vẫn đang waiting và source không đúng chính xác
-    # target date, cần có ít nhất một tín hiệu mới so với lúc create:
-    # answer/hash đổi hoặc source_modified đổi.
-    if (
-        row_is_waiting
-        and answer_data.get("answer_type")
-        == "city_holder"
-        and day_difference != 0
-    ):
-        current_combo_check = (
-            answer_data.get(
-                "combo_check_value",
-                "",
-            )
-        )
-
-        previous_combo_check = (
-            get_latest_city_combo_signature(
-                ws=ws,
-                game_key=game_key,
-                exclude_target_date=date_str,
-            )
-        )
-
-        # Với source lệch +/-1 ngày,
-        # chỉ Combo mới được coi là tín hiệu mới.
-        combo_changed = bool(
-            current_combo_check
-            and previous_combo_check
-            and current_combo_check
-            != previous_combo_check
-        )
-
-        print(
-            "City Holder current combo signature: "
-            f"{current_combo_check}"
-        )
-
-        print(
-            "City Holder previous combo signature: "
-            f"{previous_combo_check}"
-        )
-
-        print(
-            "City Holder combo changed: "
-            f"{combo_changed}"
-        )
-
-        if not combo_changed:
-            print(
-                "City Holder source is within +/-1 day "
-                "but Combo has not changed. "
-                "Quiz data is ignored for publish detection. "
-                "Keep post as draft."
-            )
-
-            update_log_row(
-                ws,
-                row_idx,
-                {
-                    "source_modified": source_modified,
-                    "status": (
-                        "checked_city_holder_draft_"
-                        "no_new_combo"
-                    ),
-                    "updated_at": timestamp,
-                },
-            )
-
-            return
-
-
-    if not answer_changed and not row_is_waiting:
-        print("Answer unchanged. No post update needed.")
-        update_log_row(ws, row_idx, {
-            "source_modified": source_modified,
-            "status": "checked_no_new_answer",
-            "updated_at": timestamp,
-        })
-        return
-
-    print("Valid answer detected. Updating existing post.")
-
-    existing_post = get_wp_post(cfg, post_id)
-    existing_content = (
-        existing_post.get("content", {}).get("raw")
-        or existing_post.get("content", {}).get("rendered", "")
-    )
-
-    last_updated_text = None
-
-    if (
-        answer_data.get("answer_type")
-        == "red_packet_codes"
-    ):
-        last_updated_text = (
-            format_datetime_readable(
-                now_local(
-                    cfg["timezone"]
-                )
-            )
-        )
-    
-    updated_content = update_existing_answer_content(
-        content_html=existing_content,
-        game_cfg=game_cfg,
-        answer_data=answer_data,
-        readable_date=readable_date,
-        last_updated_text=last_updated_text,
-    )
-
-    updated_content = auto_link_html(updated_content, cfg)
-
-    existing_status = str(
-        existing_post.get("status")
-        or ""
-    ).lower()
-
-    publish_now = existing_status in {
-        "draft",
-        "future",
-        "pending",
-    }
-
-    update_wp_post(
-        cfg,
-        post_id,
-        updated_content,
-        publish_now=publish_now,
-    )
-
-    if publish_now:
-        final_status = "published_with_new_answer"
-    else:
-        final_status = "updated_with_new_answer"
-
-    update_log_row(ws, row_idx, {
-        "source_modified": source_modified,
-        "question": answer_data.get(
-            "question",
-            "",
-        ),
-        "answer": answer_data.get(
-            "answer",
-            "",
-        ),
-        "check_answer": current_check_value,
-        "status": final_status,
-        "updated_at": timestamp,
-    })
-
-    if publish_now:
-        print(
-            f"Published post {post_id} "
-            "with valid answer."
-        )
-    else:
-        print(f"Updated post {post_id}")
-
-    print(f"Status: {final_status}")
+    raise RuntimeError(f"Invalid RUN_MODE: {run_mode}")
 
 
 def main():
@@ -4953,7 +3072,3 @@ def main():
             time.sleep(2)
         except Exception as e:
             print(f"ERROR game={game_cfg.get('game_key')}: {e}")
-
-
-if __name__ == "__main__":
-    main()
