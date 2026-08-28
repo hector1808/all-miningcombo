@@ -515,11 +515,59 @@ def strip_prefix(text, prefix):
 
     return text[match.end():].strip()
 
+def extract_by_selector_and_prefix(
+    soup,
+    selector,
+    prefix,
+    text_separator=" ",
+    exclude_prefixes=None,
+):
+    exclude_prefixes = exclude_prefixes or []
 
-def extract_by_selector_and_prefix(soup, selector, prefix):
     for el in soup.select(selector):
-        text = el.get_text(" ", strip=True)
-        value = strip_prefix(text, prefix)
+        text = html.unescape(
+            el.get_text(
+                text_separator,
+                strip=True,
+            )
+        )
+
+        text = text.strip()
+
+        if not text:
+            continue
+
+        # Dùng cho trường hợp prefix rỗng,
+        # ví dụ Fomo Fighters:
+        # bỏ Date và Answer, lấy paragraph Riddle.
+        should_skip = False
+
+        for excluded in exclude_prefixes:
+            clean_excluded = (
+                str(excluded)
+                .strip()
+                .rstrip(":")
+            )
+
+            if re.match(
+                rf"^\s*{re.escape(clean_excluded)}\s*:?",
+                text,
+                flags=re.I,
+            ):
+                should_skip = True
+                break
+
+        if should_skip:
+            continue
+
+        # Prefix rỗng = lấy nguyên text.
+        if prefix == "":
+            return normalize_answer(text)
+
+        value = strip_prefix(
+            text,
+            prefix,
+        )
 
         if value:
             return value
@@ -527,28 +575,190 @@ def extract_by_selector_and_prefix(soup, selector, prefix):
     return ""
 
 
-def extract_question_answer(content_html, game_cfg, cfg):
-    question_selector = game_cfg.get("question_selector") or cfg["defaults"]["question_selector"]
-    answer_selector = game_cfg.get("answer_selector") or cfg["defaults"]["answer_selector"]
+def find_source_section_scope(
+    soup,
+    heading_contains,
+):
+    if not heading_contains:
+        return soup
 
-    question_prefix = game_cfg.get("question_prefix") or cfg["defaults"].get("question_prefix", "Question:")
-    answer_prefix = game_cfg.get("answer_prefix") or cfg["defaults"].get("answer_prefix", "Answer:")
+    heading_contains = (
+        heading_contains
+        .strip()
+        .lower()
+    )
 
-    soup = BeautifulSoup(content_html, "html.parser")
+    for h2 in soup.find_all("h2"):
+        heading_text = normalize_answer(
+            h2.get_text(
+                " ",
+                strip=True,
+            )
+        ).lower()
+
+        if heading_contains not in heading_text:
+            continue
+
+        # MiningCombo hiện đang đặt từng answer
+        # trong wp-block-cover.
+        cover = h2.find_parent(
+            "div",
+            class_=lambda classes: (
+                classes
+                and "wp-block-cover" in classes
+            ),
+        )
+
+        if cover:
+            return cover
+
+        # Fallback nếu MiningCombo bỏ wp-block-cover.
+        if h2.parent:
+            return h2.parent
+
+    return soup
+
+
+def extract_source_date_from_scope(
+    scope,
+    selector="p",
+    prefix="Date",
+):
+    raw_date = extract_by_selector_and_prefix(
+        soup=scope,
+        selector=selector,
+        prefix=prefix,
+    )
+
+    raw_date = normalize_answer(
+        raw_date
+    )
+
+    if not raw_date:
+        return None
+
+    match = re.search(
+        r"([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+        raw_date,
+    )
+
+    if not match:
+        return None
+
+    try:
+        return datetime.strptime(
+            match.group(1),
+            "%B %d, %Y",
+        ).date()
+    except ValueError:
+        return None
+
+
+def extract_question_answer(
+    content_html,
+    game_cfg,
+    cfg,
+):
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    # Chỉ parse trong đúng section của game.
+    # Nếu config không có thì behavior cũ.
+    scope = find_source_section_scope(
+        soup,
+        game_cfg.get(
+            "source_heading_contains",
+            "",
+        ),
+    )
+
+    question_selector = (
+        game_cfg.get("question_selector")
+        or cfg["defaults"]["question_selector"]
+    )
+
+    answer_selector = (
+        game_cfg.get("answer_selector")
+        or cfg["defaults"]["answer_selector"]
+    )
+
+    # Quan trọng:
+    # cho phép config explicitly đặt prefix = ""
+    if "question_prefix" in game_cfg:
+        question_prefix = game_cfg[
+            "question_prefix"
+        ]
+    else:
+        question_prefix = cfg[
+            "defaults"
+        ].get(
+            "question_prefix",
+            "Question:",
+        )
+
+    if "answer_prefix" in game_cfg:
+        answer_prefix = game_cfg[
+            "answer_prefix"
+        ]
+    else:
+        answer_prefix = cfg[
+            "defaults"
+        ].get(
+            "answer_prefix",
+            "Answer:",
+        )
 
     question = extract_by_selector_and_prefix(
-        soup=soup,
+        soup=scope,
         selector=question_selector,
         prefix=question_prefix,
+        text_separator=game_cfg.get(
+            "question_text_separator",
+            " ",
+        ),
+        exclude_prefixes=game_cfg.get(
+            "question_exclude_prefixes",
+            [],
+        ),
     )
 
     answer = extract_by_selector_and_prefix(
-        soup=soup,
+        soup=scope,
         selector=answer_selector,
         prefix=answer_prefix,
+        text_separator=game_cfg.get(
+            "answer_text_separator",
+            " ",
+        ),
     )
 
-    return question, answer
+    source_date = None
+
+    if game_cfg.get(
+        "use_content_date",
+        False,
+    ):
+        source_date = (
+            extract_source_date_from_scope(
+                scope=scope,
+                selector=game_cfg.get(
+                    "source_date_selector",
+                    "p",
+                ),
+                prefix=game_cfg.get(
+                    "source_date_prefix",
+                    "Date",
+                ),
+            )
+        )
+
+    return (
+        question,
+        answer,
+        source_date,
+    )
 
 def extract_binance_wotd(content_html):
     soup = BeautifulSoup(content_html, "html.parser")
@@ -1741,6 +1951,25 @@ def extract_game_answer_data(content_html, game_cfg, cfg):
         }
 
     if answer_type == "question_answer":
+        (
+            question,
+            answer,
+            source_date,
+        ) = extract_question_answer(
+            content_html=content_html,
+            game_cfg=game_cfg,
+            cfg=cfg,
+        )
+
+        return {
+            "answer_type": "question_answer",
+            "question": question,
+            "answer": answer,
+            "check_value": answer,
+            "source_date": source_date,
+        }
+
+    if answer_type == "question_answer":
         question, answer = extract_question_answer(
             content_html=content_html,
             game_cfg=game_cfg,
@@ -2031,7 +2260,10 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
     target_p.clear()
 
     q_label = soup.new_tag("strong")
-    q_label.string = "Question:"
+    q_label.string = game_cfg.get(
+        "question_label",
+        "Question:",
+    )
     target_p.append(q_label)
     target_p.append(soup.new_tag("br"))
     target_p.append(question or "Updating soon.")
@@ -2040,10 +2272,32 @@ def update_quiz_answer_block(content_html, game_cfg, question, answer):
     target_p.append(soup.new_tag("br"))
 
     a_label = soup.new_tag("strong")
-    a_label.string = "Correct Answer:"
+    a_label.string = game_cfg.get(
+        "answer_label",
+        "Correct Answer:",
+    )
     target_p.append(a_label)
     target_p.append(soup.new_tag("br"))
-    target_p.append(answer or "Updating soon.")
+    answer_text = (
+        answer
+        or "Updating soon."
+    )
+
+    answer_lines = str(
+        answer_text
+    ).splitlines()
+
+    for idx, line in enumerate(
+        answer_lines
+    ):
+        if idx > 0:
+            target_p.append(
+                soup.new_tag("br")
+            )
+
+        target_p.append(
+            line.strip()
+        )
 
     return str(soup)
 
@@ -3580,6 +3834,38 @@ def process_game(cfg, ws, game_cfg):
         "check_value",
         "",
     )
+
+    # =====================================================
+    # GENERIC DAILY GAME:
+    # Nếu config yêu cầu dùng Date trong HTML source,
+    # ưu tiên Date này thay vì modified time.
+    # =====================================================
+
+    content_source_date = answer_data.get(
+        "source_date"
+    )
+
+    if (
+        run_mode == "update"
+        and game_cfg.get(
+            "use_content_date",
+            False,
+        )
+    ):
+        source_is_today_target = (
+            content_source_date
+            == target_date_obj
+        )
+
+        print(
+            f"{game_key} content source date: "
+            f"{content_source_date}"
+        )
+
+        print(
+            f"{game_key} content date matches target: "
+            f"{source_is_today_target}"
+        )
 
     # =====================================================
     # HRUM: UPDATE THEO DATE TRONG SOURCE
