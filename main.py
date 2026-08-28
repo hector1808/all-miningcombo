@@ -208,6 +208,40 @@ def format_date_slug(date_value):
     )
 
 
+def get_sheet_records(ws):
+    """
+    Read Sheet using raw cell values instead of gspread.get_all_records().
+
+    This keeps row lookup stable even when a new optional header is appended
+    or the Sheet has an older column order. Column A/B remain target_date/game_key.
+    """
+    values = ws.get_all_values()
+
+    if not values:
+        return []
+
+    headers = [
+        str(value or "").strip().lstrip("\ufeff")
+        for value in values[0]
+    ]
+
+    records = []
+
+    for sheet_row, cells in enumerate(values[1:], start=2):
+        padded = list(cells) + [""] * max(0, len(headers) - len(cells))
+
+        row = {
+            headers[index]: padded[index]
+            for index in range(len(headers))
+            if headers[index]
+        }
+
+        row["__sheet_row__"] = sheet_row
+        records.append(row)
+
+    return records
+
+
 def make_city_combo_signature(combo_lines):
     if not combo_lines:
         return ""
@@ -228,7 +262,7 @@ def get_latest_city_combo_signature(
     game_key,
     exclude_target_date=None,
 ):
-    records = ws.get_all_records()
+    records = get_sheet_records(ws)
 
     for row in reversed(records):
         if str(
@@ -277,7 +311,7 @@ def get_latest_city_combo_signature(
 
 
 def get_latest_check_answer_for_game(ws, game_key):
-    records = ws.get_all_records()
+    records = get_sheet_records(ws)
 
     latest_row = None
 
@@ -381,17 +415,31 @@ def get_sheet(cfg):
 
     if missing_headers:
         new_headers = existing_headers + missing_headers
-        ws.update("1:1", [new_headers])
+        ws.update(values=[new_headers], range_name="1:1")
 
     return ws
 
 
 def find_log_row(ws, target_date, game_key):
-    records = ws.get_all_records()
+    records = get_sheet_records(ws)
 
-    for idx, row in enumerate(records, start=2):
-        if str(row.get("target_date")) == target_date and str(row.get("game_key")) == game_key:
-            return idx, row
+    target_date = str(target_date or "").strip()
+    game_key = str(game_key or "").strip()
+
+    for row in records:
+        row_target_date = str(
+            row.get("target_date") or ""
+        ).strip()
+
+        row_game_key = str(
+            row.get("game_key") or ""
+        ).strip()
+
+        if (
+            row_target_date == target_date
+            and row_game_key == game_key
+        ):
+            return row["__sheet_row__"], row
 
     return None, None
 
@@ -3102,6 +3150,7 @@ def main():
                 f"{game_cfg.get('game_key')}: "
                 f"{e}"
             )
+
 
 if __name__ == "__main__":
     main()
