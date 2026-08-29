@@ -1039,7 +1039,7 @@ def find_city_combo_element(soup):
             tag = getattr(sibling, "name", None)
 
             # Hỗ trợ cả format cũ và mới
-            if tag in {"pre", "ol"}:
+            if tag in {"pre", "ol","p"}:
                 return sibling
 
             # Không tìm tràn sang section kế tiếp
@@ -1245,15 +1245,30 @@ def extract_city_combo_lines(soup):
 
     if combo_element.name == "pre":
         combo_lines = extract_pre_lines(combo_element)
-    else:
+
+    elif combo_element.name == "ol":
         combo_lines = [
-            f"{index}. {normalize_answer(li.get_text(' ', strip=True))}"
-            for index, li in enumerate(
+            f"{i}. {normalize_answer(li.get_text(' ', strip=True))}"
+            for i, li in enumerate(
                 combo_element.find_all("li", recursive=False),
                 start=1,
             )
             if normalize_answer(li.get_text(" ", strip=True))
         ]
+
+    elif combo_element.name == "p":
+        raw = html.unescape(
+            combo_element.get_text("\n", strip=True)
+        )
+
+        combo_lines = [
+            normalize_answer(line)
+            for line in raw.splitlines()
+            if normalize_answer(line)
+        ]
+
+    else:
+        combo_lines = []
 
     if is_waiting_content(combo_lines):
         return []
