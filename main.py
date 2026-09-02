@@ -602,9 +602,9 @@ def extract_source_date_from_scope(
         prefix=prefix,
     )
 
-    raw_date = normalize_answer(
-        raw_date
-    )
+    raw_date = normalize_answer(raw_date)
+    raw_date = re.sub(r"(?<=\d)\s+(?=\d)", "", raw_date)
+    raw_date = re.sub(r"\s+,", ",", raw_date)
 
     if not raw_date:
         return None
