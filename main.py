@@ -865,6 +865,9 @@ def extract_quote_author(content_html):
             p.get_text(" ", strip=True)
         )
 
+        text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
+        text = re.sub(r"\s+,", ",", text)
+
         if source_date is None:
             date_match = re.search(
                 r"\bDate\s*:\s*"
