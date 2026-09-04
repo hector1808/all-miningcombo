@@ -865,24 +865,34 @@ def extract_quote_author(content_html):
             p.get_text(" ", strip=True)
         )
 
-        text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
+        # text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
         text = re.sub(r"\s+,", ",", text)
 
         if source_date is None:
             date_match = re.search(
                 r"\bDate\s*:\s*"
-                r"([A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+                r"([A-Za-z]+)\s+"
+                r"(\d{1,2})(?:\s+(\d))?"
+                r"\s*,?\s+(\d{4})\b",
                 text,
                 flags=re.I,
             )
-
+        
             if date_match:
                 try:
-                    date_text = date_match.group(1).replace(",", "")
+                    month = date_match.group(1)
+                    day = date_match.group(2)
+        
+                    if date_match.group(3):
+                        day += date_match.group(3)
+        
+                    year = date_match.group(4)
+        
                     source_date = datetime.strptime(
-                        date_text,
+                        f"{month} {day} {year}",
                         "%B %d %Y",
                     ).date()
+        
                 except ValueError:
                     source_date = None
 
