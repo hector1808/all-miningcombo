@@ -74,6 +74,9 @@ tag_rules:
 - url_contains: hamster-kombat-gamedev-daily-combo
   tag_ids:
   - 16818
+- url_contains: meme-mining-daily-combo
+  tag_ids:
+  - 16892
   
 games:
 - game_key: spur_protocol
@@ -311,3 +314,20 @@ img_quiz:
     slug_format: hamster-kombat-gamedev-daily-combo-{{CURRENT_DATE_SLUG}}
     seo_title_format: Hamster Kombat GameDev Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Updated Daily
     meta_description_format: Hamster Kombat GameDev Daily Combo today, updated daily. Check the three combo cards and follow the quick steps to complete today’s GameDev challenge.
+
+
+  - game_key: meme_mining_combo
+    game_name: MEME Mining Daily Combo
+    enabled: true
+    publish_time: '05:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/57411
+    template_file: games/meme-mining.txt
+    featured_media_id: 343482
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: MEME Mining Daily Combo Today
+    title_format: MEME Mining Daily Combo Today: {{CURRENT_DATE_READABLE}}
+    slug_format: meme-mining-daily-combo-{{CURRENT_DATE_SLUG}}
+    seo_title_format: MEME Mining daily combo ({{CURRENT_DATE_READABLE}}) – Today’s Combo
+    meta_description_format: Check the latest MEME Mining daily combo, see the correct item order, and learn how to complete today’s combo in the MEME Mining Telegram game.
