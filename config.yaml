@@ -330,7 +330,7 @@ img_quiz:
     answer_placeholder: '{{ANSWER_AREA}}'
     answer_area_id: answer-area
     answer_image_alt: MEME Mining Daily Combo Today
-    title_format: MEME Mining Daily Combo Today: {{CURRENT_DATE_READABLE}}
+    title_format: 'MEME Mining Daily Combo Today: {{CURRENT_DATE_READABLE}}'
     slug_format: meme-mining-daily-combo-{{CURRENT_DATE_SLUG}}
     seo_title_format: MEME Mining daily combo ({{CURRENT_DATE_READABLE}}) – Today’s Combo
     meta_description_format: Check the latest MEME Mining daily combo, see the correct item order, and learn how to complete today’s combo in the MEME Mining Telegram game.
@@ -347,7 +347,7 @@ img_quiz:
     answer_placeholder: '{{ANSWER_AREA}}'
     answer_area_id: answer-area
     answer_image_alt: Signal [2193] Daily Robo Combo Today
-    title_format: Signal [2193] Daily Robo Combo: {{CURRENT_DATE_READABLE}}
+    title_format: 'Signal [2193] Daily Robo Combo: {{CURRENT_DATE_READABLE}}'
     slug_format: signal-2193-daily-robo-combo-{{CURRENT_DATE_SLUG}}
     seo_title_format: Signal [2193] Daily Robo Combo ({{CURRENT_DATE_READABLE}}) – Today’s Solution and Reward
     meta_description_format: Find the latest Signal [2193] Daily Robo Combo, match today’s Robo Combo arrangement, and submit the correct solution to earn the available reward.
