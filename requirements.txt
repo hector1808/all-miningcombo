@@ -4,3 +4,4 @@ PyYAML
 gspread
 google-auth
 openai
+Pillow
