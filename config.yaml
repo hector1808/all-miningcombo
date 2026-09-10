@@ -284,3 +284,27 @@ games:
   seo_title_format: TiCkTOM Daily Combo Today ({{CURRENT_DATE_READABLE}}) - Cards & How to Claim
   meta_description_format: Find the TiCkTOM Daily Combo today for {{CURRENT_DATE_READABLE}}. Upgrade the correct three cards,
     open the Combo Chest, and claim your daily reward.
+
+
+
+img_quiz:
+  defaults:
+    image_selector: img.daily-combo-image
+    crop_top_ratio: 0.10
+    latest_news_model: gpt-5-nano-2025-08-07
+  games:
+  - game_key: hamster_gamedev_daily_combo
+    game_name: Hamster Kombat GameDev Heroes
+    enabled: true
+    publish_time: '13:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/3119
+    template_file: games/hamster-gamedev-combo.txt
+    featured_media_id: 343476
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Hamster Kombat GameDev Daily Combo answer for {{CURRENT_DATE_READABLE}}
+    title_format: Hamster Kombat GameDev Daily Combo Today – {{CURRENT_DATE_READABLE}}
+    slug_format: hamster-kombat-gamedev-daily-combo-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Hamster Kombat GameDev Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Updated Daily
+    meta_description_format: Hamster Kombat GameDev Daily Combo today, updated daily. Check the three combo cards and follow the quick steps to complete today’s GameDev challenge.
