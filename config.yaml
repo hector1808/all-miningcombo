@@ -71,6 +71,9 @@ tag_rules:
 - url_contains: ticktom-daily-combo-today
   tag_ids:
   - 16886
+- url_contains: hamster-kombat-gamedev-daily-combo
+  tag_ids:
+  - 16818
   
 games:
 - game_key: spur_protocol
