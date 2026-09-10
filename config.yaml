@@ -77,6 +77,9 @@ tag_rules:
 - url_contains: meme-mining-daily-combo
   tag_ids:
   - 16892
+- url_contains: signal-2193-daily-robo-combo
+  tag_ids:
+  - 16894
   
 games:
 - game_key: spur_protocol
@@ -331,3 +334,20 @@ img_quiz:
     slug_format: meme-mining-daily-combo-{{CURRENT_DATE_SLUG}}
     seo_title_format: MEME Mining daily combo ({{CURRENT_DATE_READABLE}}) – Today’s Combo
     meta_description_format: Check the latest MEME Mining daily combo, see the correct item order, and learn how to complete today’s combo in the MEME Mining Telegram game.
+
+
+  - game_key: signal_2193_robo_combo
+    game_name: Signal [2193] Daily Robo Combo
+    enabled: true
+    publish_time: '05:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/57406
+    template_file: games/signal-2193-robo-combo.txt
+    featured_media_id: 343485
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Signal [2193] Daily Robo Combo Today
+    title_format: Signal [2193] Daily Robo Combo: {{CURRENT_DATE_READABLE}}
+    slug_format: signal-2193-daily-robo-combo-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Signal [2193] Daily Robo Combo ({{CURRENT_DATE_READABLE}}) – Today’s Solution and Reward
+    meta_description_format: Find the latest Signal [2193] Daily Robo Combo, match today’s Robo Combo arrangement, and submit the correct solution to earn the available reward.
