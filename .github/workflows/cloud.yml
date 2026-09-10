@@ -18,7 +18,7 @@ permissions:
 jobs:
   # =========================================================
   # CREATE
-  # Chỉ chạy main.py
+  # Chạy main.py, sau đó img-quiz.py
   # =========================================================
   create_post:
     if: inputs.run_mode == 'create'
@@ -47,9 +47,20 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: python main.py
 
+      - name: Run image quiz create
+        if: always()
+        env:
+          RUN_MODE: create
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python img-quiz.py
+
   # =========================================================
   # UPDATE
-  # Chạy main.py trước, sau đó feature.py
+  # Chạy main.py, img-quiz.py, sau đó feature.py
   # =========================================================
   update_answer:
     if: inputs.run_mode == 'update'
@@ -85,3 +96,14 @@ jobs:
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
         run: python feature.py
+
+      - name: Run image quiz update
+        if: always()
+        env:
+          RUN_MODE: update
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python img-quiz.py
