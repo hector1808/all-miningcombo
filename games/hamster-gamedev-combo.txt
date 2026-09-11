@@ -7,7 +7,7 @@
 <div id="answer-area">{{ANSWER_AREA}}</div>
 <p><strong>Latest updated:</strong><span style="font-weight: 400;"> {{CURRENT_DATE_READABLE}}</span></p>
 <p><span style="font-weight: 400;">Open Hamster Kombat GameDev, locate the three cards shown above, and unlock or upgrade the required cards to complete the daily combo.</span></p>
-<p><span style="font-weight: 400;">Missed an earlier combo? Find previous daily updates here: </span><a href="http://hamster-kombat"><span style="font-weight: 400;">Hamster Kombat GameDev Daily Combo</span></a></p>
+<p><span style="font-weight: 400;">Missed an earlier combo? Find previous daily updates here: </span><a href="https://blog.mexc.com/tag/hamster-kombat/"><span style="font-weight: 400;">Hamster Kombat GameDev Daily Combo</span></a></p>
 <h2><strong>What Is Hamster Kombat GameDev?</strong></h2>
 <p><span style="font-weight: 400;">Hamster Kombat GameDev, also known as GameDev Heroes, puts players in charge of developing a game studio. Gameplay revolves around building up the studio, working with hamsters, launching projects, and improving different parts of the operation. The official GameDev channel also describes activities involving projects, teams, fan points, rankings, and other in-game systems.</span></p>
 <p><span style="font-weight: 400;">The </span><strong>Daily Combo</strong><span style="font-weight: 400;"> is one of its recurring challenges. A combo consists of three specific cards, with the required selection changing over time.</span></p>
