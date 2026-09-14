@@ -24,7 +24,7 @@
 <p><span style="font-weight: 400;">The Safe Code is a quick task that can be completed without solving a long puzzle. Once the correct directional sequence is available, players only need to enter the arrows in the correct order.</span></p>
 <p><span style="font-weight: 400;">Completing it regularly may help players add to their in-game progress and collect the available $HUNT reward. The reference does not specify a fixed reward amount, so check the reward displayed inside the game before completing the task.</span></p>
 <h2><strong>Latest CoinHunters Updates: {{CURRENT_DATE_READABLE}}</strong></h2>
-<p>{{LATEST_NEWS}}</p>
+{{LATEST_NEWS}}
 <h2><strong>FAQ</strong></h2>
 <p> </p>
 <p><strong>How do I use the CoinHunters safe code?</strong></p>
