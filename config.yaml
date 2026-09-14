@@ -86,6 +86,9 @@ tag_rules:
 - url_contains: grow-tea-daily-combo-today
   tag_ids:
   - 16898
+- url_contains: golden-miner-daily-combo
+  tag_ids:
+  - 16900
   
 games:
 - game_key: spur_protocol
@@ -391,3 +394,20 @@ img_quiz:
     slug_format: grow-tea-daily-combo-today-{{CURRENT_DATE_SLUG}}
     seo_title_format: Grow Tea Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Answer & How to Claim
     meta_description_format: Find the Grow Tea Daily Combo today for {{CURRENT_DATE_READABLE}}. Arrange the correct icons, submit your combo, and claim 1,000 Silver Gems.
+
+
+  - game_key: golden_miner_combo
+    game_name: Golden Miner Daily Combo
+    enabled: true
+    publish_time: '05:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/50645
+    template_file: games/golden-miner.txt
+    featured_media_id: 343776
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today's Golden Miner Daily Combo
+    title_format: 'Golden Miner Daily Combo Today - {{CURRENT_DATE_READABLE}}'
+    slug_format: golden-miner-daily-combo-today-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Golden Miner Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Answer & How to Claim
+    meta_description_format: Find the Golden Miner Daily Combo today for {{CURRENT_DATE_READABLE}}. Complete the daily challenge in the Telegram bot and claim the available 500 Silver reward.
