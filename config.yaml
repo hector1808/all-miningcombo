@@ -80,6 +80,12 @@ tag_rules:
 - url_contains: signal-2193-daily-robo-combo
   tag_ids:
   - 16894
+- url_contains: doodle-jump-daily-combo-today
+  tag_ids:
+  - 16896
+- url_contains: grow-tea-daily-combo-today
+  tag_ids:
+  - 16898
   
 games:
 - game_key: spur_protocol
@@ -367,4 +373,21 @@ img_quiz:
     title_format: 'Doodle Jump Daily Combo Today - {{CURRENT_DATE_READABLE}}'
     slug_format: doodle-jump-daily-combo-today-{{CURRENT_DATE_SLUG}}
     seo_title_format: Doodle Jump Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Combo & How to Claim
-    meta_description_format: Find the Doodle Jump Daily Combo today for {{CURRENT_DATE_READABLE}}. Select the correct three Doodlers, check your combo, and claim the daily reward..
+    meta_description_format: Find the Doodle Jump Daily Combo today for {{CURRENT_DATE_READABLE}}. Select the correct three Doodlers, check your combo, and claim the daily reward.
+
+
+  - game_key: grow_tea_combo
+    game_name: Grow Tea Daily Combo
+    enabled: true
+    publish_time: '05:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/50266
+    template_file: games/grow-tea.txt
+    featured_media_id: 343768
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today's Grow Tea Daily Combo
+    title_format: 'Grow Tea Daily Combo Today - {{CURRENT_DATE_READABLE}}'
+    slug_format: grow-tea-daily-combo-today-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Grow Tea Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Answer & How to Claim
+    meta_description_format: Find the Grow Tea Daily Combo today for {{CURRENT_DATE_READABLE}}. Arrange the correct icons, submit your combo, and claim 1,000 Silver Gems.
