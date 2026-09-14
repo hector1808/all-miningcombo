@@ -95,6 +95,9 @@ tag_rules:
 - url_contains: wemine-daily-case-code
   tag_ids:
   - 16904
+- url_contains: bee-harvest-daily-combo
+  tag_ids:
+  - 16906
   
 games:
 - game_key: spur_protocol
@@ -451,3 +454,20 @@ img_quiz:
     slug_format: wemine-daily-case-code-{{CURRENT_DATE_SLUG}}
     seo_title_format: WeMine Daily Case Code Today ({{CURRENT_DATE_READABLE}}) - How to Claim
     meta_description_format: WeMine Daily Case Code for {{CURRENT_DATE_READABLE}}. Find today’s two General case codes, learn how to submit them, and check the latest WeMine reward update.
+
+
+  - game_key: bee_harvest_daily_combo
+    game_name: Bee Harvest Daily Combo
+    enabled: true
+    publish_time: '06:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/14514
+    template_file: games/bee-harvest-daily-combo.txt
+    featured_media_id: 343781 
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today's Bee Harvest Daily Combo
+    title_format: 'Bee Harvest Daily Combo Today – {{CURRENT_DATE_READABLE}}'
+    slug_format: bee-harvest-daily-combo-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Bee Harvest Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Latest Combo Update
+    meta_description_format: Bee Harvest Daily Combo today, updated daily. Check the latest combo, learn how to select the correct images, and complete the daily task in Bee Harvest.
