@@ -12,6 +12,7 @@ import os
 import time
 from io import BytesIO
 from urllib.parse import urljoin
+from datetime import timedelta
 
 import requests
 from bs4 import BeautifulSoup
@@ -753,6 +754,76 @@ def create_image_quiz_post(
         f"with status {post.get('status')}."
     )
 
+def get_source_modified_local(
+    source,
+    timezone_name,
+):
+    """
+    Get the source modified time and normalize it to the
+    configured local timezone.
+
+    Prefer modified_gmt because WordPress guarantees that
+    this field represents UTC. Fall back to modified when
+    the GMT field is unavailable.
+    """
+
+    source_modified_gmt = (
+        source.get("modified_gmt")
+        or source.get("date_gmt")
+        or ""
+    )
+
+    if source_modified_gmt:
+        source_dt = core.parse_wp_datetime_gmt(
+            source_modified_gmt,
+            timezone_name,
+        )
+
+        return (
+            source_modified_gmt,
+            source_dt,
+        )
+
+    source_modified_local = (
+        source.get("modified")
+        or source.get("date")
+        or ""
+    )
+
+    source_dt = core.parse_wp_datetime_local(
+        source_modified_local,
+        timezone_name,
+    )
+
+    return (
+        source_modified_local,
+        source_dt,
+    )
+
+
+def source_date_is_allowed(
+    source_dt,
+    target_date,
+):
+    """
+    Allow a source modified on:
+    - the target date; or
+    - one calendar day before the target date.
+
+    Dates are compared only after source_dt has been
+    converted to the configured local timezone.
+    """
+
+    if source_dt is None:
+        return False
+
+    allowed_dates = {
+        target_date,
+        target_date - timedelta(days=1),
+    }
+
+    return source_dt.date() in allowed_dates
+
 
 def update_image_quiz_post(
     cfg,
@@ -803,37 +874,53 @@ def update_image_quiz_post(
         game_cfg["source_api_url"]
     )
 
-    source_modified = (
-        source.get("modified")
-        or source.get("date")
-        or ""
+    source_modified, source_modified_dt = (
+        get_source_modified_local(
+            source,
+            cfg["timezone"],
+        )
     )
-
-    if not core.source_modified_matches_target(
-        source_modified,
-        cfg["timezone"],
+    
+    if not source_date_is_allowed(
+        source_modified_dt,
         target_date,
     ):
+        allowed_previous_date = (
+            target_date - timedelta(days=1)
+        )
+    
         core.update_log_row(
             ws,
             row_idx,
             {
-                "source_modified": (
-                    source_modified
-                ),
+                "source_modified": source_modified,
                 "status": (
-                    "checked_source_not_target_date"
+                    "checked_source_outside_"
+                    "allowed_date_window"
                 ),
                 "updated_at": timestamp,
             },
         )
-
+    
         print(
-            f"{game_key}: source is not "
-            f"for target {date_str}. Skip."
+            f"{game_key}: source modified time "
+            f"{source_modified!r} "
+            f"became {source_modified_dt} "
+            f"in timezone {cfg['timezone']}. "
+            f"Allowed dates are "
+            f"{allowed_previous_date} and "
+            f"{target_date}. Skip."
         )
-
+    
         return
+    
+    print(
+        f"{game_key}: source modified time "
+        f"{source_modified!r} "
+        f"became {source_modified_dt} "
+        f"in timezone {cfg['timezone']}; "
+        "date is allowed."
+    )
 
     selector = game_cfg.get(
         "image_selector",
