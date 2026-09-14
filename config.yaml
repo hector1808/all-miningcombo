@@ -89,6 +89,9 @@ tag_rules:
 - url_contains: golden-miner-daily-combo
   tag_ids:
   - 16900
+- url_contains: coinhunters-daily-safe-code
+  tag_ids:
+  - 16902
   
 games:
 - game_key: spur_protocol
@@ -411,3 +414,20 @@ img_quiz:
     slug_format: golden-miner-daily-combo-today-{{CURRENT_DATE_SLUG}}
     seo_title_format: Golden Miner Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Answer & How to Claim
     meta_description_format: Find the Golden Miner Daily Combo today for {{CURRENT_DATE_READABLE}}. Complete the daily challenge in the Telegram bot and claim the available 500 Silver reward.
+
+
+  - game_key: coinhunters_daily_safe_code
+    game_name: CoinHunters Daily Safe Code
+    enabled: true
+    publish_time: '06:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/19131
+    template_file: games/coinhunters-safe-code.txt
+    featured_media_id: 343777
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today’s CoinHunters Daily Safe Code
+    title_format: 'CoinHunters Daily Safe Code Today – {{CURRENT_DATE_READABLE}}'
+    slug_format: coinhunters-daily-safe-code-{{CURRENT_DATE_SLUG}}
+    seo_title_format: CoinHunters Daily Safe Code Today ({{CURRENT_DATE_READABLE}}) – Updated Daily
+    meta_description_format: CoinHunters Daily Safe Code for {{CURRENT_DATE_READABLE}}. Enter today’s arrow sequence, complete the safe task, and check the latest CoinHunters updates.
