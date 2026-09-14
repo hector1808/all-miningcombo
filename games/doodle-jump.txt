@@ -1,0 +1,40 @@
+<figure class="wp-block-image size-full">
+  <img src="https://blog.mexc.com/wp-content/uploads/2026/09/doodle-jump-daily-combo.jpg" alt="Doodle Jump Daily Combo" />
+</figure>
+<p><span style="font-weight: 400;">Need today’s </span><strong>Doodle Jump Daily Combo</strong><span style="font-weight: 400;"> before completing your daily tasks? The challenge asks you to select three Doodlers in the correct order and submit the combination inside the Doodle Jump Telegram game.</span></p>
+<p><span style="font-weight: 400;">Here’s the latest combo status for {{CURRENT_DATE_READABLE}} and how to use it once the correct combination is confirmed.</span></p>
+<h2><strong>Today's Doodle Jump Daily Combo</strong></h2>
+<p><span style="font-weight: 400;">The </span><strong>Doodle Jump Daily Combo for {{CURRENT_DATE_READABLE}}</strong><span style="font-weight: 400;"> is:</span></p>
+<div id="answer-area">{{ANSWER_AREA}}</div>
+<p><span style="font-weight: 400;">The reference source is still searching for today’s combination and has not published the three confirmed Doodlers yet. This section should be updated once the correct combo becomes available.</span></p>
+<p><span style="font-weight: 400;">Completing the correct combination awards </span><strong>10 Coins and 100 XP</strong><span style="font-weight: 400;"> according to the current game information.</span></p>
+<p><span style="font-weight: 400;">Missed an earlier Doodle Jump Daily Combo? Find previous daily answers on the MEXC Blog’s </span><a href="https://blog.mexc.com/tag/doodle-jump/"><span style="font-weight: 400;">Doodle Jump daily combo</span></a><span style="font-weight: 400;"> update page.</span></p>
+<h2><strong>What Is Doodle Jump?</strong></h2>
+<p><span style="font-weight: 400;">Doodle Jump is a Telegram-based game built around climbing through levels while collecting Coins and Stars and improving your characters. Players can also earn additional bonuses through the game’s referral system.</span></p>
+<p><span style="font-weight: 400;">The game began in </span><strong>May 2026</strong><span style="font-weight: 400;"> and includes recurring activities such as the Daily Combo Challenge, which gives players an additional task to complete alongside the main progression gameplay.</span></p>
+<h2><strong>How to Complete the Doodle Jump Daily Combo</strong></h2>
+<p><span style="font-weight: 400;">Unlike card-upgrade combos in some Telegram games, Doodle Jump asks you to identify </span><strong>three Doodlers and choose them in the correct order</strong><span style="font-weight: 400;">.</span></p>
+<p><span style="font-weight: 400;">To complete the challenge:</span></p>
+<ol>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Open the </span><strong>Doodle Jump Bot</strong><span style="font-weight: 400;"> in Telegram.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Tap the </span><strong>Menu</strong><span style="font-weight: 400;"> button on the home screen.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Select </span><strong>Combo</strong><span style="font-weight: 400;">.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Choose the three Doodlers shown in today’s confirmed combo, keeping them in the correct order.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Tap </span><strong>Check Combo</strong><span style="font-weight: 400;">.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">If all three selections are correct, the game awards the available Daily Combo reward.</span></li>
+</ol>
+<p><span style="font-weight: 400;">The current reference lists the reward as </span><strong>10 Coins and 100 XP</strong><span style="font-weight: 400;">. The combination changes daily, so make sure you are using the answer for the correct date.</span></p>
+<h2><strong>A Few Things to Check Before Submitting</strong></h2>
+<p><span style="font-weight: 400;">Order matters in this challenge. Selecting the right three Doodlers but entering them incorrectly may prevent the combo from being accepted.</span></p>
+<p><span style="font-weight: 400;">It is also worth checking the date before submitting. Daily combo pages can still show information from a previous challenge while a new answer is being verified, so avoid reusing an older combination unless it has been confirmed for today.</span></p>
+<h2><strong>Latest Doodle Jump Updates: {{CURRENT_DATE_READABLE}}</strong></h2>
+{{LATEST_NEWS}}
+<h2><strong>FAQ</strong></h2>
+<h3><strong>How many Doodlers are needed for the Doodle Jump Daily Combo?</strong></h3>
+<p><span style="font-weight: 400;">You need to select </span><strong>three Doodlers</strong><span style="font-weight: 400;"> and place them in the correct order before checking the combo.</span></p>
+<h3><strong>What reward do I get for completing the Daily Combo?</strong></h3>
+<p><span style="font-weight: 400;">The current listed reward is </span><strong>10 Coins and 100 XP</strong><span style="font-weight: 400;"> for successfully completing the challenge.</span></p>
+<h3><strong>Where do I enter the Doodle Jump Daily Combo?</strong></h3>
+<p><span style="font-weight: 400;">Open the Doodle Jump Telegram Bot, go to </span><strong>Menu</strong><span style="font-weight: 400;">, choose </span><strong>Combo</strong><span style="font-weight: 400;">, select the three Doodlers in order, and press </span><strong>Check Combo</strong><span style="font-weight: 400;">.</span></p>
+<h3><strong>Does Doodle Jump have a cryptocurrency token?</strong></h3>
+<p><span style="font-weight: 400;">The reference states that there has been no official announcement confirming a future Doodle Jump cryptocurrency token listing. In-game Coins should not be treated as evidence of a tradable token.</span></p>
