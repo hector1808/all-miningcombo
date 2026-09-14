@@ -92,6 +92,9 @@ tag_rules:
 - url_contains: coinhunters-daily-safe-code
   tag_ids:
   - 16902
+- url_contains: wemine-daily-case-code
+  tag_ids:
+  - 16904
   
 games:
 - game_key: spur_protocol
@@ -431,3 +434,20 @@ img_quiz:
     slug_format: coinhunters-daily-safe-code-{{CURRENT_DATE_SLUG}}
     seo_title_format: CoinHunters Daily Safe Code Today ({{CURRENT_DATE_READABLE}}) – Updated Daily
     meta_description_format: CoinHunters Daily Safe Code for {{CURRENT_DATE_READABLE}}. Enter today’s arrow sequence, complete the safe task, and check the latest CoinHunters updates.
+
+
+  - game_key: wemine_daily_case_code
+    game_name: WeMine Daily Case Code
+    enabled: true
+    publish_time: '17:00'
+    publish_day_offset: -1
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/12326
+    template_file: games/wemine-daily-case-code.txt
+    featured_media_id: 343780 
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today’s WeMine Daily Case Code
+    title_format: 'WeMine Daily Case Code Today – {{CURRENT_DATE_READABLE}}'
+    slug_format: wemine-daily-case-code-{{CURRENT_DATE_SLUG}}
+    seo_title_format: WeMine Daily Case Code Today ({{CURRENT_DATE_READABLE}}) - How to Claim
+    meta_description_format: WeMine Daily Case Code for {{CURRENT_DATE_READABLE}}. Find today’s two General case codes, learn how to submit them, and check the latest WeMine reward update.
