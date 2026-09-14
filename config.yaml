@@ -351,3 +351,20 @@ img_quiz:
     slug_format: signal-2193-daily-robo-combo-{{CURRENT_DATE_SLUG}}
     seo_title_format: Signal [2193] Daily Robo Combo ({{CURRENT_DATE_READABLE}}) – Today’s Solution and Reward
     meta_description_format: Find the latest Signal [2193] Daily Robo Combo, match today’s Robo Combo arrangement, and submit the correct solution to earn the available reward.
+
+
+  - game_key: doodle_jump_combo
+    game_name: Doodle Jump Daily Combo
+    enabled: true
+    publish_time: '06:00'
+    publish_day_offset: 0
+    source_api_url: https://miningcombo.com/wp-json/wp/v2/pages/57723
+    template_file: games/doodle-jump.txt
+    featured_media_id: 343756
+    answer_placeholder: '{{ANSWER_AREA}}'
+    answer_area_id: answer-area
+    answer_image_alt: Today's Doodle Jump Daily Combo
+    title_format: 'Doodle Jump Daily Combo Today - {{CURRENT_DATE_READABLE}}'
+    slug_format: doodle-jump-daily-combo-today-{{CURRENT_DATE_SLUG}}
+    seo_title_format: Doodle Jump Daily Combo Today ({{CURRENT_DATE_READABLE}}) – Combo & How to Claim
+    meta_description_format: Find the Doodle Jump Daily Combo today for {{CURRENT_DATE_READABLE}}. Select the correct three Doodlers, check your combo, and claim the daily reward..
