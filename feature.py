@@ -125,6 +125,105 @@ def replace_area(soup, area_id, new_html):
     return True
 
 
+def translation_post_ids(post):
+    """Return linked Polylang translations as (language, post_id)."""
+    translations = post.get("translations", {}) or {}
+    source_id = int(post.get("id") or 0)
+    result = []
+
+    if not isinstance(translations, dict):
+        print(
+            "Translations: unexpected WordPress translations format; "
+            "expected a language-to-post-ID mapping."
+        )
+        return result
+
+    for language, post_id in translations.items():
+        try:
+            post_id = int(post_id)
+        except (TypeError, ValueError):
+            continue
+
+        if not post_id or post_id == source_id:
+            continue
+
+        result.append((str(language), post_id))
+
+    return result
+
+
+def copy_inner_html(target, source):
+    """Copy a source element's inner HTML verbatim into a target element."""
+    source_html = source.decode_contents()
+
+    if target.decode_contents() == source_html:
+        return False
+
+    target.clear()
+    fragment = BeautifulSoup(source_html, "html.parser")
+
+    for node in list(fragment.contents):
+        target.append(node)
+
+    return True
+
+
+def sync_linked_translations(original_post, source_soup, sync_content, label):
+    """Retry-safe synchronization for all translations linked by Polylang."""
+    translations = translation_post_ids(original_post)
+
+    if not translations:
+        print(f"{label} translations: no linked translation posts found.")
+        return
+
+    updated = 0
+    unchanged = 0
+    failed = 0
+
+    for language, post_id in translations:
+        try:
+            translated_post = get_wp_post(post_id)
+            translated_content = translated_post.get(
+                "content",
+                {},
+            ).get("raw", "")
+
+            if not translated_content:
+                raise RuntimeError("translated post content is empty")
+
+            translated_soup = BeautifulSoup(
+                translated_content,
+                "html.parser",
+            )
+
+            if not sync_content(source_soup, translated_soup):
+                unchanged += 1
+                print(
+                    f"{label} translation {language} "
+                    f"(post {post_id}): already up to date."
+                )
+                continue
+
+            update_wp_post(post_id, str(translated_soup))
+            updated += 1
+            print(
+                f"{label} translation {language} "
+                f"(post {post_id}): synchronized."
+            )
+
+        except Exception as e:
+            failed += 1
+            print(
+                f"ERROR {label} translation {language} "
+                f"(post {post_id}): {e}"
+            )
+
+    print(
+        f"{label} translations complete: "
+        f"{updated} updated, {unchanged} unchanged, {failed} failed."
+    )
+
+
 # =========================================================
 # DROPEE
 # =========================================================
@@ -464,6 +563,125 @@ def extract_wotd_current_meta(area):
 
     return theme, reward
 
+
+def wotd_row_length(row):
+    cells = row.find_all(["td", "th"])
+
+    if len(cells) < 2:
+        return None
+
+    match = re.search(
+        r"\b([3-8])\b",
+        clean(cells[0].get_text(" ", strip=True)),
+    )
+
+    return match.group(1) if match else None
+
+
+def sync_wotd_translation_content(source_soup, translated_soup):
+    """
+    Synchronize only WOTD's dynamic regions.
+
+    The answer/meta area and its dated heading are copied verbatim. Answer
+    cells and detailed answer lists are also copied verbatim, while the rest
+    of the translated article remains untouched.
+    """
+    changed = False
+
+    source_area = source_soup.find(
+        "div",
+        id="binance-wotd-answer-area",
+    )
+    translated_area = translated_soup.find(
+        "div",
+        id="binance-wotd-answer-area",
+    )
+
+    if not source_area or not translated_area:
+        raise RuntimeError(
+            "#binance-wotd-answer-area missing in source or translation"
+        )
+
+    if copy_inner_html(translated_area, source_area):
+        changed = True
+
+    # Keep the dated Rank Math TOC entry aligned with the source post.
+    source_toc = source_soup.find(
+        "a",
+        href="#binance-wotd-answer-area",
+    )
+    translated_toc = translated_soup.find(
+        "a",
+        href="#binance-wotd-answer-area",
+    )
+
+    if source_toc and translated_toc:
+        if copy_inner_html(translated_toc, source_toc):
+            changed = True
+
+    # Copy only the answer column; translated row labels remain intact.
+    source_table = find_wotd_table(source_soup)
+    translated_table = find_wotd_table(translated_soup)
+
+    source_rows = {}
+
+    for row in source_table.find_all("tr"):
+        length = wotd_row_length(row)
+
+        if length:
+            source_rows[length] = row
+
+    for row in translated_table.find_all("tr"):
+        length = wotd_row_length(row)
+
+        if not length or length not in source_rows:
+            continue
+
+        source_cells = source_rows[length].find_all(["td", "th"])
+        translated_cells = row.find_all(["td", "th"])
+
+        if copy_inner_html(translated_cells[1], source_cells[1]):
+            changed = True
+
+    missing_lengths = {
+        str(length)
+        for length in range(3, 9)
+    } - set(source_rows)
+
+    if missing_lengths:
+        raise RuntimeError(
+            "WOTD source table rows missing for translation sync: "
+            + ", ".join(sorted(missing_lengths))
+        )
+
+    # Copy every 3-8 letter answer list verbatim.
+    for length in range(3, 9):
+        heading_id = (
+            "binance-word-of-the-day-"
+            f"{length}-letter-answers"
+        )
+        source_heading = source_soup.find("h3", id=heading_id)
+        translated_heading = translated_soup.find("h3", id=heading_id)
+
+        if not source_heading or not translated_heading:
+            raise RuntimeError(
+                f"WOTD heading #{heading_id} missing in source or translation"
+            )
+
+        source_ul = find_ul_after_heading(source_heading)
+        translated_ul = find_ul_after_heading(translated_heading)
+
+        if not source_ul or not translated_ul:
+            raise RuntimeError(
+                f"WOTD answer list after #{heading_id} missing "
+                "in source or translation"
+            )
+
+        if copy_inner_html(translated_ul, source_ul):
+            changed = True
+
+    return changed
+
 def update_wotd():
     d = today()
     date = readable_date(d)
@@ -703,27 +921,35 @@ def update_wotd():
     # 8. Save
     # -----------------------------------------------------
 
-    if not changed:
-        print("WOTD: already up to date.")
-        return
-
-    update_wp_post(
-        WOTD_POST_ID,
-        str(soup),
-    )
-
-    if answers_ready:
-        print(
-            f"WOTD updated: {date} | "
-            f"{expected_start} to {expected_end} | "
-            "answers updated."
+    if changed:
+        update_wp_post(
+            WOTD_POST_ID,
+            str(soup),
         )
+
+        if answers_ready:
+            print(
+                f"WOTD updated: {date} | "
+                f"{expected_start} to {expected_end} | "
+                "answers updated."
+            )
+        else:
+            print(
+                f"WOTD refreshed: {date} | "
+                f"{expected_start} to {expected_end} | "
+                "waiting for new answers."
+            )
     else:
-        print(
-            f"WOTD refreshed: {date} | "
-            f"{expected_start} to {expected_end} | "
-            "waiting for new answers."
-        )
+        print("WOTD: original post already up to date.")
+
+    # Run even when the original is unchanged so a translation that failed
+    # during an earlier run can catch up automatically.
+    sync_linked_translations(
+        post,
+        soup,
+        sync_wotd_translation_content,
+        "WOTD",
+    )
 
 
 # =========================================================
@@ -800,6 +1026,31 @@ def build_red_packet_area(codes, date):
     return "\n".join(parts)
 
 
+def sync_red_packet_translation_content(source_soup, translated_soup):
+    """
+    Copy the complete dynamic Red Packet area verbatim.
+
+    This includes the current-date heading, Last updated date, numbering, and
+    codes. Everything outside #red-packet-answer-area stays translated and is
+    left untouched.
+    """
+    source_area = source_soup.find(
+        "div",
+        id="red-packet-answer-area",
+    )
+    translated_area = translated_soup.find(
+        "div",
+        id="red-packet-answer-area",
+    )
+
+    if not source_area or not translated_area:
+        raise RuntimeError(
+            "#red-packet-answer-area missing in source or translation"
+        )
+
+    return copy_inner_html(translated_area, source_area)
+
+
 def update_red_packet():
     # 1. Fetch codes from MiningCombo
     source = fetch_json(RED_PACKET_SOURCE)
@@ -840,38 +1091,51 @@ def update_red_packet():
     current_text = clean(target.get_text(" ", strip=True))
     date_is_current = current_date in current_text
 
-    if current_codes == source_codes and date_is_current:
-        print(
-            f"Red Packet: unchanged "
-            f"({len(source_codes)} codes, {current_date}). Skip."
+    original_changed = not (
+        current_codes == source_codes
+        and date_is_current
+    )
+
+    if original_changed:
+        # 6. Rebuild using current GMT+7 date
+        new_area = build_red_packet_area(
+            source_codes,
+            current_date,
         )
-        return
 
-    # 6. Rebuild using current GMT+7 date
-    new_area = build_red_packet_area(
-        source_codes,
-        current_date,
-    )
+        target.clear()
 
-    target.clear()
+        fragment = BeautifulSoup(
+            new_area,
+            "html.parser",
+        )
 
-    fragment = BeautifulSoup(
-        new_area,
-        "html.parser",
-    )
+        for node in list(fragment.contents):
+            target.append(node)
 
-    for node in list(fragment.contents):
-        target.append(node)
+        update_wp_post(
+            RED_PACKET_POST_ID,
+            str(soup),
+        )
 
-    update_wp_post(
-        RED_PACKET_POST_ID,
-        str(soup),
-    )
+        print(
+            f"Red Packet updated: "
+            f"{len(current_codes)} → {len(source_codes)} codes | "
+            f"Date: {current_date}"
+        )
+    else:
+        print(
+            f"Red Packet: original post unchanged "
+            f"({len(source_codes)} codes, {current_date})."
+        )
 
-    print(
-        f"Red Packet updated: "
-        f"{len(current_codes)} → {len(source_codes)} codes | "
-        f"Date: {current_date}"
+    # Run even when the original is unchanged so failed translation updates
+    # are retried on the next scheduled execution.
+    sync_linked_translations(
+        post,
+        soup,
+        sync_red_packet_translation_content,
+        "Red Packet",
     )
 
 
