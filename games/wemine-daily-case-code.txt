@@ -12,20 +12,20 @@
 <li style="font-weight: 400;"><span style="font-weight: 400;">Open the official </span><strong>WeMine bot</strong><span style="font-weight: 400;"> through Telegram.</span></li>
 <li style="font-weight: 400;"><span style="font-weight: 400;">From the homepage, tap the </span><strong>headphone icon</strong><span style="font-weight: 400;"> to open the Daily Case.</span></li>
 <li style="font-weight: 400;"><span style="font-weight: 400;">Choose the case you want to complete and remain on the </span><strong>General</strong><span style="font-weight: 400;"> tab.</span></li>
-<li style="font-weight: 400;"><span style="font-weight: 400;">Select the correct code.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Choose the correct three-digit code.</span></li>
 <li style="font-weight: 400;"><span style="font-weight: 400;">Check that the middle row shows the correct sequence.</span></li>
-<li style="font-weight: 400;"><span style="font-weight: 400;">Tap </span><strong>Check for Free</strong><span style="font-weight: 400;"> to submit your selection.</span></li>
+<li style="font-weight: 400;"><span style="font-weight: 400;">Tap </span><strong>Check for Free</strong><span style="font-weight: 400;"> to submit your choice.</span></li>
 </ol>
 <p><span style="font-weight: 400;">Rewards and available attempts can differ between the two cases. Check the case name and reward panel before confirming.</span></p>
 <h2><strong>What Is WeMine?</strong></h2>
-<p><span style="font-weight: 400;">WeMine is a Telegram-based Web3 mining bot launched in September 2024. Players can access its features directly inside Telegram and participate in activities connected to the project’s $WM ecosystem.</span></p>
-<p><span style="font-weight: 400;">One of its recurring activities is the </span><strong>Daily Case</strong><span style="font-weight: 400;">, a short number challenge that requires players to select the correct three-digit combination. The code changes regularly, giving users another reason to check the bot each day.</span></p>
+<p><span style="font-weight: 400;">WeMine is a Telegram-based Web3 mining bot launched in September 2024. Players can access its features directly inside Telegram and participate in activities connected to the project’s WM token ecosystem.</span></p>
+<p><span style="font-weight: 400;">One of its recurring activities is the </span><strong>Daily Case</strong><span style="font-weight: 400;">, a short number challenge that requires players to choose the correct three-digit combination. The code changes regularly, giving users another reason to check the bot each day.</span></p>
 <p><span style="font-weight: 400;">Unlike a standard promo code that is typed into a text box, the Daily Case uses three number columns. Players move each column until the correct digits appear across the center, then submit the result with the free-check button.</span></p>
 <h2><strong>Latest WeMine Updates – {{CURRENT_DATE_READABLE}}</strong></h2>
 {{LATEST_NEWS}}
 <h2><strong>Tips for Completing the WeMine Daily Case</strong></h2>
 <ul>
-<li style="font-weight: 400;"><strong>Check the case name first.</strong><span style="font-weight: 400;"> The WeMiner and $WM Miner cases use different codes, even when both are shown under the General tab.</span></li>
+<li style="font-weight: 400;"><strong>Check the case name first.</strong><span style="font-weight: 400;"> The WeMiner and WM Miner cases use different codes, even when both are shown under the General tab.</span></li>
 <li style="font-weight: 400;"><strong>Match all three digits carefully.</strong><span style="font-weight: 400;"> Make sure the correct numbers appear across the center row before submitting.</span></li>
 <li style="font-weight: 400;"><strong>Use the code for the correct date.</strong><span style="font-weight: 400;"> Older WeMine Daily Case Codes may no longer work after the challenge changes.</span></li>
 <li style="font-weight: 400;"><strong>Review the displayed reward details.</strong><span style="font-weight: 400;"> Each case can have a different reward system, so check the information shown inside the bot.</span></li>
@@ -33,12 +33,11 @@
 <li style="font-weight: 400;"><strong>Confirm the code before tapping “Check for Free.”</strong></li>
 </ul>
 <h2><strong>FAQ</strong></h2>
-<h3> </h3>
 <h3><strong>Why are there two WeMine Daily Case codes?</strong></h3>
 <p><span style="font-weight: 400;">The current update shows separate General cases for WeMiner and $WM Miner. Each case has its own three-digit code and reward structure.</span></p>
 <h3><strong>Where do I enter the WeMine code?</strong></h3>
-<p><span style="font-weight: 400;">Open the WeMine Telegram bot, tap the headphone icon, open the Daily Case, select the correct digits, and press </span><strong>Check for Free</strong><span style="font-weight: 400;">.</span></p>
+<p><span style="font-weight: 400;">Open the WeMine Telegram bot, tap the headphone icon, open the Daily Case, choose the correct digits, and press </span><strong>Check for Free</strong><span style="font-weight: 400;">.</span></p>
 <h3><strong>What rewards can I receive from the Daily Case?</strong></h3>
-<p><span style="font-weight: 400;">The current gold case lists USDT and WUSD rewards, while the blue case lists chance-based $WM rewards. Check the live case screen because these amounts may change.</span></p>
+<p><span style="font-weight: 400;">The current gold case lists USDT and WUSD rewards, while the blue case lists chance-based WM token rewards. Check the live case screen because these amounts may change.</span></p>
 <h3><strong>How often is the WeMine Daily Case Code updated?</strong></h3>
 <p><span style="font-weight: 400;">The Daily Case is updated regularly with a new three-digit combination. Always confirm the displayed date before using a code.</span></p>
