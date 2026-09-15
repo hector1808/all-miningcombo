@@ -685,13 +685,20 @@ def create_image_quiz_post(
     # <p>Case requirements, rewards, and available attempts may change. Verify the current details inside the official game before completing the challenge.</p>
     # """.strip()
 
-    content = build_template_content(
-        cfg,
-        defaults,
-        game_cfg,
-        identity,
-        latest_news_html,
-    )
+    # content = build_template_content(
+    #     cfg,
+    #     defaults,
+    #     game_cfg,
+    #     identity,
+    #     latest_news_html,
+    # )
+
+    content = """
+    <p>The WeMine Daily Case Code will be updated here.</p>
+    <div id="answer-area">
+    <p><strong>Updating soon.</strong></p>
+    </div>
+    """.strip()
 
     # core.create_wp_post() already:
     # - applies category IDs;
