@@ -1209,7 +1209,6 @@ def extract_city_quiz_en(soup):
 
     return []
 
-
 def extract_city_quiz_ru(soup):
     for h2 in soup.find_all("h2"):
         heading = normalize_answer(
@@ -1225,31 +1224,52 @@ def extract_city_quiz_ru(soup):
         for sibling in h2.next_siblings:
             tag = getattr(sibling, "name", None)
 
+            # Không tìm tràn sang section kế tiếp.
             if tag == "h2":
                 break
 
+            answer_list = None
+
+            # Format cũ:
+            # <h2>...</h2>
+            # <ol>...</ol>
             if tag == "ol":
-                return [
-                    normalize_answer(
-                        li.get_text(
-                            " ",
-                            strip=True,
-                        )
+                answer_list = sibling
+
+            # Format mới:
+            # <h2>...</h2>
+            # <blockquote>
+            #     <ol>...</ol>
+            # </blockquote>
+            elif tag == "blockquote":
+                answer_list = sibling.find("ol")
+
+            if not answer_list:
+                continue
+
+            answers = [
+                normalize_answer(
+                    li.get_text(
+                        " ",
+                        strip=True,
                     )
-                    for li in sibling.find_all(
-                        "li",
-                        recursive=False,
+                )
+                for li in answer_list.find_all(
+                    "li",
+                    recursive=False,
+                )
+                if normalize_answer(
+                    li.get_text(
+                        " ",
+                        strip=True,
                     )
-                    if normalize_answer(
-                        li.get_text(
-                            " ",
-                            strip=True,
-                        )
-                    )
-                ]
+                )
+            ]
+
+            if answers:
+                return answers
 
     return []
-
 
 def extract_city_combo_lines(soup):
     combo_element = find_city_combo_element(soup)
