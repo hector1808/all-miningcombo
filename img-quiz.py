@@ -1238,9 +1238,46 @@ def main():
             "No img_quiz.games configured."
         )
         return
-
+    
+    selected_game_key = os.getenv(
+        "GAME_KEY",
+        "",
+    ).strip()
+    
+    if selected_game_key:
+        selected_games = [
+            game_cfg
+            for game_cfg in games
+            if game_cfg.get("game_key")
+            == selected_game_key
+        ]
+    
+        if not selected_games:
+            available_game_keys = [
+                game_cfg.get("game_key")
+                for game_cfg in games
+            ]
+    
+            raise RuntimeError(
+                f"GAME_KEY '{selected_game_key}' "
+                "was not found in img_quiz.games. "
+                f"Available keys: {available_game_keys}"
+            )
+    
+        games = selected_games
+    
+        print(
+            "Running only image game: "
+            f"{selected_game_key}"
+        )
+    else:
+        print(
+            "GAME_KEY is empty; "
+            "running all enabled image games."
+        )
+    
     ws = core.get_sheet(cfg)
-
+    
     for game_cfg in games:
         try:
             process_image_quiz(
