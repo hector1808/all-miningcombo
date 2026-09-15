@@ -672,13 +672,18 @@ def create_image_quiz_post(
     # Only now is a new post allowed to be created.
     # =====================================================
 
-    latest_news_html = (
-        generate_latest_news(
-            cfg,
-            defaults,
-            game_cfg,
-        )
-    )
+    # latest_news_html = (
+    #     generate_latest_news(
+    #         cfg,
+    #         defaults,
+    #         game_cfg,
+    #     )
+    # )
+
+    latest_news_html = """
+    <p>WeMine continues to provide its Daily Case activity through the Telegram game. Players should check the current case name and available reward information before submitting a code.</p>
+    <p>Case requirements, rewards, and available attempts may change. Verify the current details inside the official game before completing the challenge.</p>
+    """.strip()
 
     content = build_template_content(
         cfg,
