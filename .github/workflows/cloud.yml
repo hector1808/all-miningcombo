@@ -12,6 +12,12 @@ on:
           - create
           - update
 
+      game_key:
+        description: "Optional img_quiz game_key; leave empty to run all games"
+        required: false
+        default: ""
+        type: string
+
 permissions:
   contents: read
 
@@ -38,6 +44,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run create mode
+        if: inputs.game_key == ''
         env:
           RUN_MODE: create
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
@@ -51,6 +58,7 @@ jobs:
         if: always()
         env:
           RUN_MODE: create
+          GAME_KEY: ${{ inputs.game_key }}
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
           GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
