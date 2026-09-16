@@ -1215,59 +1215,85 @@ def extract_city_quiz_ru(soup):
             h2.get_text(" ", strip=True)
         ).lower()
 
-        if (
-            "city holder daily quiz answer for russia"
-            not in heading
-        ):
+        if "city holder daily quiz answer for russia" not in heading:
             continue
 
-        for sibling in h2.next_siblings:
-            tag = getattr(sibling, "name", None)
+        section_nodes = []
 
-            # Không tìm tràn sang section kế tiếp.
+        # Duyệt cả bên trong các thẻ bọc, nhưng dừng trước H2 kế tiếp.
+        for node in h2.next_elements:
+            tag = getattr(node, "name", None)
+
             if tag == "h2":
                 break
 
-            answer_list = None
+            if tag:
+                section_nodes.append(node)
 
-            # Format cũ:
-            # <h2>...</h2>
-            # <ol>...</ol>
-            if tag == "ol":
-                answer_list = sibling
-
-            # Format mới:
-            # <h2>...</h2>
-            # <blockquote>
-            #     <ol>...</ol>
-            # </blockquote>
-            elif tag == "blockquote":
-                answer_list = sibling.find("ol")
-
-            if not answer_list:
+        # 1. Ưu tiên danh sách OL/UL, bất kể nằm trong bao nhiêu lớp.
+        for node in section_nodes:
+            if node.name not in {"ol", "ul"}:
                 continue
 
             answers = [
-                normalize_answer(
-                    li.get_text(
-                        " ",
-                        strip=True,
-                    )
-                )
-                for li in answer_list.find_all(
-                    "li",
-                    recursive=False,
-                )
-                if normalize_answer(
-                    li.get_text(
-                        " ",
-                        strip=True,
-                    )
-                )
+                normalize_answer(li.get_text(" ", strip=True))
+                for li in node.find_all("li", recursive=False)
+                if normalize_answer(li.get_text(" ", strip=True))
             ]
 
             if answers:
                 return answers
+
+        # 2. Fallback: đáp án đánh số trong P/PRE.
+        # Hỗ trợ:
+        # 1 Answer
+        # 1. Answer
+        # 1) Answer
+        # 1 - Answer
+        # Nhiều dòng trong một P hoặc mỗi đáp án ở một P riêng.
+        numbered_answers = {}
+        expected_number = 1
+
+        pattern = re.compile(
+            r"^\s*(\d{1,2})"
+            r"(?:\s*[.)：:–—-]\s*|\s+)"
+            r"(.+?)\s*$"
+        )
+
+        for node in section_nodes:
+            if node.name not in {"p", "pre"}:
+                continue
+
+            # Tránh đọc trùng nếu source có P nằm trong PRE.
+            if node.name == "p" and node.find_parent("pre"):
+                continue
+
+            raw = html.unescape(
+                node.get_text("\n", strip=True)
+            )
+
+            for line in raw.splitlines():
+                match = pattern.match(line)
+
+                if not match:
+                    continue
+
+                number = int(match.group(1))
+                answer = normalize_answer(match.group(2))
+
+                if not answer:
+                    continue
+
+                # Chỉ nhận chuỗi liên tục bắt đầu từ 1,
+                # tránh lấy nhầm các số trong phần giải thích.
+                if number != expected_number:
+                    continue
+
+                numbered_answers[number] = answer
+                expected_number += 1
+
+        if numbered_answers:
+            return list(numbered_answers.values())
 
     return []
 
