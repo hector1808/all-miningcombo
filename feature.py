@@ -196,7 +196,16 @@ def sync_linked_translations(original_post, source_soup, sync_content, label):
                 "html.parser",
             )
 
-            if not sync_content(source_soup, translated_soup):
+            if translated_post.get('status') == 'trash':
+                print(f'{label} {language}: trashed post {post_id}; skip.')
+                continue
+
+            language = str(translated_post.get('lang') or language).lower().split('-')[0]
+            if language not in LOCALIZED:
+                print(f'{label} {language}: unsupported locale; left untouched.')
+                continue
+
+            if not sync_content(source_soup, translated_soup, language):
                 unchanged += 1
                 print(
                     f"{label} translation {language} "
@@ -578,110 +587,6 @@ def wotd_row_length(row):
     return match.group(1) if match else None
 
 
-def sync_wotd_translation_content(source_soup, translated_soup):
-    """
-    Synchronize only WOTD's dynamic regions.
-
-    The answer/meta area and its dated heading are copied verbatim. Answer
-    cells and detailed answer lists are also copied verbatim, while the rest
-    of the translated article remains untouched.
-    """
-    changed = False
-
-    source_area = source_soup.find(
-        "div",
-        id="binance-wotd-answer-area",
-    )
-    translated_area = translated_soup.find(
-        "div",
-        id="binance-wotd-answer-area",
-    )
-
-    if not source_area or not translated_area:
-        raise RuntimeError(
-            "#binance-wotd-answer-area missing in source or translation"
-        )
-
-    if copy_inner_html(translated_area, source_area):
-        changed = True
-
-    # Keep the dated Rank Math TOC entry aligned with the source post.
-    source_toc = source_soup.find(
-        "a",
-        href="#binance-wotd-answer-area",
-    )
-    translated_toc = translated_soup.find(
-        "a",
-        href="#binance-wotd-answer-area",
-    )
-
-    if source_toc and translated_toc:
-        if copy_inner_html(translated_toc, source_toc):
-            changed = True
-
-    # Copy only the answer column; translated row labels remain intact.
-    source_table = find_wotd_table(source_soup)
-    translated_table = find_wotd_table(translated_soup)
-
-    source_rows = {}
-
-    for row in source_table.find_all("tr"):
-        length = wotd_row_length(row)
-
-        if length:
-            source_rows[length] = row
-
-    for row in translated_table.find_all("tr"):
-        length = wotd_row_length(row)
-
-        if not length or length not in source_rows:
-            continue
-
-        source_cells = source_rows[length].find_all(["td", "th"])
-        translated_cells = row.find_all(["td", "th"])
-
-        if copy_inner_html(translated_cells[1], source_cells[1]):
-            changed = True
-
-    missing_lengths = {
-        str(length)
-        for length in range(3, 9)
-    } - set(source_rows)
-
-    if missing_lengths:
-        raise RuntimeError(
-            "WOTD source table rows missing for translation sync: "
-            + ", ".join(sorted(missing_lengths))
-        )
-
-    # Copy every 3-8 letter answer list verbatim.
-    for length in range(3, 9):
-        heading_id = (
-            "binance-word-of-the-day-"
-            f"{length}-letter-answers"
-        )
-        source_heading = source_soup.find("h3", id=heading_id)
-        translated_heading = translated_soup.find("h3", id=heading_id)
-
-        if not source_heading or not translated_heading:
-            raise RuntimeError(
-                f"WOTD heading #{heading_id} missing in source or translation"
-            )
-
-        source_ul = find_ul_after_heading(source_heading)
-        translated_ul = find_ul_after_heading(translated_heading)
-
-        if not source_ul or not translated_ul:
-            raise RuntimeError(
-                f"WOTD answer list after #{heading_id} missing "
-                "in source or translation"
-            )
-
-        if copy_inner_html(translated_ul, source_ul):
-            changed = True
-
-    return changed
-
 def update_wotd():
     d = today()
     date = readable_date(d)
@@ -1026,31 +931,6 @@ def build_red_packet_area(codes, date):
     return "\n".join(parts)
 
 
-def sync_red_packet_translation_content(source_soup, translated_soup):
-    """
-    Copy the complete dynamic Red Packet area verbatim.
-
-    This includes the current-date heading, Last updated date, numbering, and
-    codes. Everything outside #red-packet-answer-area stays translated and is
-    left untouched.
-    """
-    source_area = source_soup.find(
-        "div",
-        id="red-packet-answer-area",
-    )
-    translated_area = translated_soup.find(
-        "div",
-        id="red-packet-answer-area",
-    )
-
-    if not source_area or not translated_area:
-        raise RuntimeError(
-            "#red-packet-answer-area missing in source or translation"
-        )
-
-    return copy_inner_html(translated_area, source_area)
-
-
 def update_red_packet():
     # 1. Fetch codes from MiningCombo
     source = fetch_json(RED_PACKET_SOURCE)
@@ -1142,6 +1022,250 @@ def update_red_packet():
 # =========================================================
 # RUN
 # =========================================================
+
+LOCALIZED = {
+    "es": {
+        "months": "enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre".split(),
+        "wotd": "Respuestas de palabra del día binance de hoy",
+        "red": "codigo sobre rojo binance: códigos de hoy",
+        "hourly": "Actualizado cada hora", "updated": "Última actualización",
+        "theme": "Tema", "activity": "Fechas de la actividad",
+        "prize": "Fondo de premios", "code": "Código",
+        "waiting": "Próximamente.", "shared": "para repartir",
+        "letters": "letras", "answers": "Respuestas", "length": "Número de letras",
+    },
+    "ru": {
+        "months": "января февраля марта апреля мая июня июля августа сентября октября ноября декабря".split(),
+        "wotd": "слово дня бинанс: ответы на сегодня",
+        "red": "Красные пакеты Binance: коды на сегодня",
+        "hourly": "Обновляется каждый час", "updated": "Последнее обновление",
+        "theme": "Тема", "activity": "Даты активности",
+        "prize": "Призовой фонд", "code": "Код",
+        "waiting": "Скоро обновим.", "shared": "для распределения",
+        "letters": "букв", "answers": "Ответы", "length": "Количество букв",
+    },
+}
+
+# Add future campaign translations here. Unknown values are NOT silently
+# overwritten with English; metadata sync reports an actionable error.
+THEME_TRANSLATIONS = {
+    "Binance Stock Options": {
+        "es": "Opciones sobre acciones de Binance",
+        "ru": "Опционы на акции Binance",
+    },
+}
+
+
+def local_date(value, lang):
+    if lang == "es":
+        return f"{value.day} de {LOCALIZED[lang]['months'][value.month - 1]} de {value.year}"
+    return f"{value.day} {LOCALIZED[lang]['months'][value.month - 1]} {value.year} года"
+
+
+def local_value(value, lang, kind):
+    value = clean(value)
+    labels = LOCALIZED[lang]
+    if not value or value.lower().rstrip(".") == "updating soon":
+        return labels["waiting"]
+    if kind == "theme":
+        if value in THEME_TRANSLATIONS and lang in THEME_TRANSLATIONS[value]:
+            return THEME_TRANSLATIONS[value][lang]
+        raise RuntimeError(
+            f"Add THEME_TRANSLATIONS[{value!r}][{lang!r}] for new campaign theme"
+        )
+    match = re.fullmatch(r"(.+?)\s+to be shared!?", value, re.I)
+    if match:
+        return f"{match.group(1)} {labels['shared']}!"
+    # Bare amount/token needs no translation.
+    if re.fullmatch(r"[\d\s.,]+\s+[A-Z0-9]+", value):
+        return value
+    raise RuntimeError(f"Unrecognized prize wording: {value!r}; update local_value")
+
+
+def put_html(target, markup):
+    return copy_inner_html(target, BeautifulSoup(markup, "html.parser"))
+
+
+def following_block(heading, names):
+    """Includes wrapped lists/tables but never crosses the next H1-H3."""
+    for node in heading.next_elements:
+        name = getattr(node, "name", None)
+        if name in {"h1", "h2", "h3"}:
+            break
+        if name in names:
+            return node
+    return None
+
+
+def translated_length_heading(soup, length):
+    exact = soup.find(id=f"binance-word-of-the-day-{length}-letter-answers")
+    if exact:
+        return exact
+    candidates = []
+    for heading in soup.find_all(["h2", "h3", "h4"]):
+        text = clean(heading.get_text(" ", strip=True)).lower()
+        if (re.search(rf"(?<!\d){length}(?!\d)", text)
+                and re.search(r"letter|letras?|букв", text)):
+            candidates.append(heading)
+    if len(candidates) != 1:
+        raise RuntimeError(f"Ambiguous/missing {length}-letter heading: {len(candidates)} matches")
+    return candidates[0]
+
+
+def translated_answer_table(soup):
+    heading = soup.find(id="binance-word-of-the-day-for-this-week")
+    if heading:
+        table = following_block(heading, {"table"})
+        if table:
+            return table
+    candidates = []
+    for table in soup.find_all("table"):
+        lengths = {wotd_row_length(row) for row in table.find_all("tr")}
+        if set("345678").issubset(lengths):
+            candidates.append(table)
+    if len(candidates) != 1:
+        raise RuntimeError(f"Ambiguous/missing WOTD table: {len(candidates)} matches")
+    return candidates[0]
+
+
+def update_local_toc(soup, area_id, old_heading_id, heading_id, title):
+    for anchor in soup.find_all("a", href=True):
+        if anchor["href"] in {
+            f"#{area_id}", f"#{heading_id}",
+            f"#{old_heading_id}" if old_heading_id else "__none__",
+        }:
+            anchor.string = title
+            if anchor["href"] != f"#{area_id}":
+                anchor["href"] = f"#{heading_id}"
+
+
+def sync_wotd_translation_content(source_soup, translated_soup, language):
+    before = str(translated_soup)
+    labels = LOCALIZED[language]
+    area_id = "binance-wotd-answer-area"
+    source_area = source_soup.find(id=area_id)
+    area = translated_soup.find(id=area_id)
+    # Stable marker is mandatory: do not guess and replace unrelated prose.
+    if not source_area or not area:
+        raise RuntimeError(f"Missing #{area_id}; restore marker in translation")
+    heading = area.find(["h2", "h3"])
+    old_id = heading.get("id") if heading else None
+    heading_id = old_id or "wotd-current-answers"
+    # Read the date from the finalized English area (same date even at midnight).
+    match = re.search(r"Last updated:\s*([A-Za-z]+ \d{1,2}, \d{4})",
+                      source_area.get_text(" ", strip=True))
+    if not match:
+        raise RuntimeError("WOTD source date missing")
+    d = datetime.strptime(match.group(1), "%B %d, %Y").date()
+    title = f"{labels['wotd']} — {local_date(d, language)}"
+    if not heading:
+        heading = translated_soup.new_tag("h2", id=heading_id)
+        area.insert(0, heading)
+    heading.string = title
+    heading["id"] = heading_id
+    update_local_toc(translated_soup, area_id, old_id, heading_id, title)
+    # Metadata errors do not stop answer table/lists or the dated heading.
+    try:
+        theme, reward = extract_wotd_current_meta(source_area)
+        theme = local_value(theme, language, "theme")
+        reward = local_value(reward, language, "prize")
+        dates = re.search(r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})",
+                          source_area.get_text(" ", strip=True))
+        if not dates:
+            raise RuntimeError("WOTD activity dates missing")
+        start, end = [datetime.fromisoformat(x).date() for x in dates.groups()]
+        fields = [
+            (labels["theme"], theme),
+            (labels["activity"], f"{local_date(start, language)} — {local_date(end, language)}"),
+            (labels["updated"], local_date(d, language)),
+            (labels["prize"], reward),
+        ]
+        markup = str(heading) + "\n" + "\n".join(
+            f"<p><strong>{html.escape(key)}:</strong> {html.escape(value)}</p>"
+            for key, value in fields
+        )
+        put_html(area, markup)
+    except Exception as exc:
+        print(f"WARNING WOTD {language} metadata: {exc}")
+
+    # Table and each answer section fail independently and retry next run.
+    try:
+        src_table = find_wotd_table(source_soup)
+        dst_table = translated_answer_table(translated_soup)
+        source_rows = {wotd_row_length(r): r for r in src_table.find_all("tr")}
+        target_rows = {wotd_row_length(r): r for r in dst_table.find_all("tr")}
+        for length in "345678":
+            if length not in source_rows or length not in target_rows:
+                raise RuntimeError(f"Missing table row for {length} letters")
+        for length in "345678":
+            cells = target_rows[length].find_all(["td", "th"])
+            cells[0].string = f"{length} {labels['letters']}"
+            source_cell = source_rows[length].find_all(["td", "th"])[1]
+            copy_inner_html(cells[1], source_cell)
+            if clean(cells[1].get_text()).lower() == "updating soon.":
+                cells[1].string = labels["waiting"]
+        for row in dst_table.find_all("tr"):
+            cells = row.find_all("th")
+            if len(cells) == 2 and wotd_row_length(row) is None:
+                cells[0].string = labels["length"]
+                cells[1].string = labels["answers"]
+        print(f"WOTD {language}: table 3–8 synchronized")
+    except Exception as exc:
+        print(f"WARNING WOTD {language} table: {exc}")
+
+    for length in range(3, 9):
+        try:
+            source_heading = source_soup.find(id=f"binance-word-of-the-day-{length}-letter-answers")
+            source_list = following_block(source_heading, {"ul", "ol"}) if source_heading else None
+            if not source_list:
+                raise RuntimeError("Source list missing")
+            target_heading = translated_length_heading(translated_soup, length)
+            target_list = following_block(target_heading, {"ul", "ol"})
+            if not target_list:
+                # Do not erase paragraphs when no list can be identified.
+                # Insert a new list immediately after the identified heading.
+                target_list = translated_soup.new_tag(source_list.name)
+                target_heading.insert_after(target_list)
+            copy_inner_html(target_list, source_list)
+            for li in target_list.find_all("li"):
+                if clean(li.get_text()).lower() == "updating soon.":
+                    li.string = labels["waiting"]
+            print(f"WOTD {language}: {length}-letter list synchronized")
+        except Exception as exc:
+            print(f"WARNING WOTD {language} {length}-letter list: {exc}")
+    return before != str(translated_soup)
+
+
+def sync_red_packet_translation_content(source_soup, translated_soup, language):
+    before = str(translated_soup)
+    area_id = "red-packet-answer-area"
+    source_area = source_soup.find(id=area_id)
+    area = translated_soup.find(id=area_id)
+    if not source_area or not area:
+        raise RuntimeError(f"Missing #{area_id}")
+    codes = extract_red_packet_codes(str(source_area))
+    if not codes:
+        raise RuntimeError("No source codes; translation left intact")
+    match = re.search(r"Last updated:\s*([A-Za-z]+ \d{1,2}, \d{4})",
+                      source_area.get_text(" ", strip=True))
+    if not match:
+        raise RuntimeError("Red Packet source date missing")
+    d = datetime.strptime(match.group(1), "%B %d, %Y").date()
+    labels = LOCALIZED[language]
+    old_heading = area.find(["h2", "h3"])
+    old_id = old_heading.get("id") if old_heading else None
+    heading_id = old_id or "red-packet-current-codes"
+    title = f"{labels['red']} — {local_date(d, language)} ({labels['hourly']})"
+    markup = (
+        f'<h2 id="{html.escape(heading_id, quote=True)}">{html.escape(title)}</h2>'
+        f"<p><strong>{labels['updated']}:</strong> {local_date(d, language)}</p>"
+    )
+    for item in codes:
+        markup += f"<p>#{item['number']:02d} {labels['code']}: {html.escape(item['code'])}</p>"
+    put_html(area, markup)
+    update_local_toc(translated_soup, area_id, old_id, heading_id, title)
+    return before != str(translated_soup)
+
 
 def main():
     if os.getenv("RUN_MODE", "update").lower() != "update":
