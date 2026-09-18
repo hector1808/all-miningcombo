@@ -1039,7 +1039,6 @@ def extract_money_bux_codes(content_html):
         )
     ]
 
-
 def find_city_combo_element(soup):
     for h2 in soup.find_all("h2"):
         heading = html.unescape(
@@ -1049,19 +1048,19 @@ def find_city_combo_element(soup):
         if "city holder daily combo" not in heading:
             continue
 
-        for sibling in h2.next_siblings:
-            tag = getattr(sibling, "name", None)
+        # Duyệt cả nội dung bên trong blockquote/div nhiều lớp.
+        for node in h2.next_elements:
+            tag = getattr(node, "name", None)
 
-            # Hỗ trợ cả format cũ và mới
-            if tag in {"pre", "ol","p"}:
-                return sibling
-
-            # Không tìm tràn sang section kế tiếp
-            if tag == "h2":
+            # Không tìm tràn sang section tiếp theo.
+            if tag in {"h1", "h2"}:
                 break
 
-    return None
+            if tag in {"pre", "ol", "p"}:
+                if node.get_text(" ", strip=True):
+                    return node
 
+    return None
 
 def extract_pre_lines(pre_element):
     if not pre_element:
