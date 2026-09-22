@@ -200,8 +200,9 @@ def sync_linked_translations(original_post, source_soup, sync_content, label):
                 print(f'{label} {language}: trashed post {post_id}; skip.')
                 continue
 
-            language = str(translated_post.get('lang') or language).lower().split('-')[0]
-            if language not in LOCALIZED:
+            language = normalize_language(translated_post.get('lang') or language)
+            allowed = TRANSLATION_LANGUAGES.get(sync_content.__name__, set())
+            if language not in LOCALIZED or language not in allowed:
                 print(f'{label} {language}: unsupported locale; left untouched.')
                 continue
 
@@ -580,8 +581,8 @@ def wotd_row_length(row):
         return None
 
     match = re.search(
-        r"\b([3-8])\b",
-        clean(cells[0].get_text(" ", strip=True)),
+        r"(?<!\d)([3-8])(?!\d)",
+        normalize_digits(clean(cells[0].get_text(" ", strip=True))),
     )
 
     return match.group(1) if match else None
@@ -1037,7 +1038,7 @@ LOCALIZED = {
     "ru": {
         "months": "января февраля марта апреля мая июня июля августа сентября октября ноября декабря".split(),
         "wotd": "слово дня бинанс: ответы на сегодня",
-        "red": "Красные пакеты Binance: коды на сегодня",
+        "red": "red packet binance код сегодня",
         "hourly": "Обновляется каждый час", "updated": "Последнее обновление",
         "theme": "Тема", "activity": "Даты активности",
         "prize": "Призовой фонд", "code": "Код",
@@ -1046,20 +1047,110 @@ LOCALIZED = {
     },
 }
 
+LOCALIZED.update({
+    "zh-hant": {
+        "wotd": "幣安wotd答案：今日幣安猜字解答",
+        "red": "今日幣安紅包代碼",
+        "hourly": "每小時更新", "updated": "最後更新",
+        "theme": "主題", "activity": "活動日期", "prize": "獎池",
+        "code": "代碼", "waiting": "即將更新。",
+        "shared": "獎勵供瓜分", "letters": "個字母",
+        "answers": "答案", "length": "字母數",
+    },
+    "ar": {
+        "months": "يناير فبراير مارس أبريل مايو يونيو يوليو أغسطس سبتمبر أكتوبر نوفمبر ديسمبر".split(),
+        "red": "اكواد صندوق العملات الرقمية بينانس اليوم",
+        "hourly": "يتم التحديث كل ساعة", "updated": "آخر تحديث",
+        "code": "الرمز", "waiting": "سيتم التحديث قريبًا.",
+    },
+    "sr": {
+        "months": "јануара фебруара марта априла маја јуна јула августа септембра октобра новембра децембра".split(),
+        "red": "red packet binance код телеграм — данашњи кодови",
+        "hourly": "Ажурира се сваког сата", "updated": "Последње ажурирање",
+        "code": "Код", "waiting": "Ускоро.",
+    },
+    "id": {
+        "months": "Januari Februari Maret April Mei Juni Juli Agustus September Oktober November Desember".split(),
+        "wotd": "jawaban wotd binance hari ini",
+        "updated": "Terakhir diperbarui", "theme": "Tema",
+        "activity": "Periode aktivitas", "prize": "Total hadiah",
+        "waiting": "Segera diperbarui.", "shared": "untuk dibagikan",
+        "letters": "huruf", "answers": "Jawaban", "length": "Jumlah huruf",
+    },
+    "vi": {
+        "wotd": "Đáp án Binance WOTD hôm nay",
+        "updated": "Cập nhật lần cuối", "theme": "Chủ đề",
+        "activity": "Thời gian hoạt động", "prize": "Tổng giải thưởng",
+        "waiting": "Sẽ sớm cập nhật.", "shared": "được chia sẻ",
+        "letters": "chữ cái", "answers": "Đáp án", "length": "Số chữ cái",
+    },
+    "pt": {
+        "months": "janeiro fevereiro março abril maio junho julho agosto setembro outubro novembro dezembro".split(),
+        "wotd": "Respostas da Palavra do Dia da Binance de hoje",
+        "updated": "Última atualização", "theme": "Tema",
+        "activity": "Período da atividade", "prize": "Total de prêmios",
+        "waiting": "Em breve.", "shared": "para distribuir",
+        "letters": "letras", "answers": "Respostas", "length": "Número de letras",
+    },
+    "hi": {
+        "months": "जनवरी फरवरी मार्च अप्रैल मई जून जुलाई अगस्त सितंबर अक्टूबर नवंबर दिसंबर".split(),
+        "wotd": "आज के Binance WOTD के उत्तर",
+        "updated": "अंतिम अपडेट", "theme": "विषय",
+        "activity": "गतिविधि की तारीखें", "prize": "कुल पुरस्कार",
+        "waiting": "जल्द अपडेट होगा।", "shared": "बाँटे जाएंगे",
+        "letters": "अक्षर", "answers": "उत्तर", "length": "अक्षरों की संख्या",
+    },
+})
+
+# Only synchronize the languages enabled for each article.
+TRANSLATION_LANGUAGES = {
+    "sync_red_packet_translation_content": {"es", "ru", "zh-hant", "ar", "sr"},
+    "sync_wotd_translation_content": {"es", "ru", "id", "vi", "pt", "zh-hant", "hi"},
+}
+
+
+def normalize_language(value):
+    language = str(value).strip().lower().replace("_", "-")
+    if language in {"zh-tw", "zh-hk", "zh-mo"} or language.startswith("zh-hant"):
+        return "zh-hant"
+    if language in LOCALIZED:
+        return language
+    return language.split("-")[0]
+
+
+def normalize_digits(value):
+    # Hindi/Arabic digits may occur in translated heading/table labels.
+    return value.translate(str.maketrans("०१२३४५६७८९٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+
+
 # Add future campaign translations here. Unknown values are NOT silently
 # overwritten with English; metadata sync reports an actionable error.
 THEME_TRANSLATIONS = {
     "Binance Stock Options": {
         "es": "Opciones sobre acciones de Binance",
         "ru": "Опционы на акции Binance",
+        "id": "Opsi Saham Binance",
+        "vi": "Quyền chọn cổ phiếu Binance",
+        "pt": "Opções de ações da Binance",
+        "zh-hant": "幣安股票期權",
+        "hi": "Binance स्टॉक ऑप्शंस",
     },
 }
 
 
 def local_date(value, lang):
-    if lang == "es":
+    if lang in {"es", "pt"}:
         return f"{value.day} de {LOCALIZED[lang]['months'][value.month - 1]} de {value.year}"
-    return f"{value.day} {LOCALIZED[lang]['months'][value.month - 1]} {value.year} года"
+    if lang == "zh-hant":
+        return f"{value.year}年{value.month}月{value.day}日"
+    if lang == "vi":
+        return f"ngày {value.day} tháng {value.month} năm {value.year}"
+    month = LOCALIZED[lang]["months"][value.month - 1]
+    if lang == "ru":
+        return f"{value.day} {month} {value.year} года"
+    if lang == "sr":
+        return f"{value.day}. {month} {value.year}."
+    return f"{value.day} {month} {value.year}"
 
 
 def local_value(value, lang, kind):
@@ -1103,9 +1194,9 @@ def translated_length_heading(soup, length):
         return exact
     candidates = []
     for heading in soup.find_all(["h2", "h3", "h4"]):
-        text = clean(heading.get_text(" ", strip=True)).lower()
+        text = normalize_digits(clean(heading.get_text(" ", strip=True))).lower()
         if (re.search(rf"(?<!\d){length}(?!\d)", text)
-                and re.search(r"letter|letras?|букв", text)):
+                and re.search(r"letter|letras?|букв|huruf|chữ cái|ký tự|字母|अक्षर", text)):
             candidates.append(heading)
     if len(candidates) != 1:
         raise RuntimeError(f"Ambiguous/missing {length}-letter heading: {len(candidates)} matches")
