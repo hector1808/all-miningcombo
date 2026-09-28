@@ -1123,9 +1123,18 @@ def normalize_digits(value):
     return value.translate(str.maketrans("०१२३४५६७८९٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
 
 
-# Add future campaign translations here. Unknown values are NOT silently
-# overwritten with English; metadata sync reports an actionable error.
+# Optional translations for campaign names. Unknown themes use the CURRENT
+# English value, so a new campaign can never freeze dates or keep an old theme.
 THEME_TRANSLATIONS = {
+    "IPOs Are Moving On-Chain": {
+        "es": "Las OPI se trasladan a la blockchain",
+        "ru": "IPO переходят на блокчейн",
+        "id": "IPO Beralih ke Blockchain",
+        "vi": "Các đợt IPO đang chuyển lên blockchain",
+        "pt": "Os IPOs estão migrando para a blockchain",
+        "zh-hant": "IPO 正在轉移至鏈上",
+        "hi": "IPO ब्लॉकचेन पर आ रहे हैं",
+    },
     "Binance Stock Options": {
         "es": "Opciones sobre acciones de Binance",
         "ru": "Опционы на акции Binance",
@@ -1161,20 +1170,34 @@ def local_value(value, lang, kind):
     if kind == "theme":
         if value in THEME_TRANSLATIONS and lang in THEME_TRANSLATIONS[value]:
             return THEME_TRANSLATIONS[value][lang]
-        raise RuntimeError(
-            f"Add THEME_TRANSLATIONS[{value!r}][{lang!r}] for new campaign theme"
+        print(
+            f"WOTD {lang}: no theme translation for {value!r}; "
+            "using current EN theme."
         )
+        return value
     match = re.fullmatch(r"(.+?)\s+to be shared!?", value, re.I)
     if match:
         return f"{match.group(1)} {labels['shared']}!"
     # Bare amount/token needs no translation.
     if re.fullmatch(r"[\d\s.,]+\s+[A-Z0-9]+", value):
         return value
-    raise RuntimeError(f"Unrecognized prize wording: {value!r}; update local_value")
+    print(
+        f"WOTD {lang}: unrecognized prize wording; using current EN value."
+    )
+    return value
 
 
 def put_html(target, markup):
     return copy_inner_html(target, BeautifulSoup(markup, "html.parser"))
+
+
+def current_wotd_metadata_value(value, language, kind):
+    """Translation failure must not retain previous campaign metadata."""
+    try:
+        return local_value(value, language, kind)
+    except Exception as exc:
+        print(f"WARNING WOTD {language} {kind}: {exc}; using current EN value.")
+        return clean(value) or LOCALIZED[language]["waiting"]
 
 
 def following_block(heading, names):
@@ -1255,29 +1278,41 @@ def sync_wotd_translation_content(source_soup, translated_soup, language):
     heading.string = title
     heading["id"] = heading_id
     update_local_toc(translated_soup, area_id, old_id, heading_id, title)
-    # Metadata errors do not stop answer table/lists or the dated heading.
+    # Both heading and Last updated use the finalized EN date, refreshed on
+    # every daily run by update_wotd(), even when the answers do not change.
+    # Localize each value independently: a new theme/prize cannot freeze dates.
+    theme, reward = extract_wotd_current_meta(source_area)
+    theme = current_wotd_metadata_value(theme, language, "theme")
+    reward = current_wotd_metadata_value(reward, language, "prize")
+    activity = ""
+    for paragraph in source_area.find_all("p"):
+        text = clean(paragraph.get_text(" ", strip=True))
+        match = re.match(r"^Activity Dates\s*:\s*(.*)$", text, re.I)
+        if match:
+            activity = match.group(1)
+            break
+    activity_display = activity or labels["waiting"]
     try:
-        theme, reward = extract_wotd_current_meta(source_area)
-        theme = local_value(theme, language, "theme")
-        reward = local_value(reward, language, "prize")
-        dates = re.search(r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})",
-                          source_area.get_text(" ", strip=True))
-        if not dates:
-            raise RuntimeError("WOTD activity dates missing")
-        start, end = [datetime.fromisoformat(x).date() for x in dates.groups()]
-        fields = [
-            (labels["theme"], theme),
-            (labels["activity"], f"{local_date(start, language)} — {local_date(end, language)}"),
-            (labels["updated"], local_date(d, language)),
-            (labels["prize"], reward),
-        ]
-        markup = str(heading) + "\n" + "\n".join(
-            f"<p><strong>{html.escape(key)}:</strong> {html.escape(value)}</p>"
-            for key, value in fields
+        dates = re.fullmatch(
+            r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})", activity
         )
-        put_html(area, markup)
-    except Exception as exc:
-        print(f"WARNING WOTD {language} metadata: {exc}")
+        if not dates:
+            raise ValueError("unrecognized EN activity date format")
+        start, end = [datetime.fromisoformat(x).date() for x in dates.groups()]
+        activity_display = f"{local_date(start, language)} — {local_date(end, language)}"
+    except ValueError as exc:
+        print(f"WARNING WOTD {language} activity: {exc}; using current EN value.")
+    fields = [
+        (labels["theme"], theme),
+        (labels["activity"], activity_display),
+        (labels["updated"], local_date(d, language)),
+        (labels["prize"], reward),
+    ]
+    markup = str(heading) + "\n" + "\n".join(
+        f"<p><strong>{html.escape(key)}:</strong> {html.escape(value)}</p>"
+        for key, value in fields
+    )
+    put_html(area, markup)
 
     # Table and each answer section fail independently and retry next run.
     try:
