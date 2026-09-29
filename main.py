@@ -1048,17 +1048,60 @@ def find_city_combo_element(soup):
         if "city holder daily combo" not in heading:
             continue
 
-        # Duyệt cả nội dung bên trong blockquote/div nhiều lớp.
+        first_element = None
+        language_blocks = []
+        languages = set()
+
         for node in h2.next_elements:
             tag = getattr(node, "name", None)
 
-            # Không tìm tràn sang section tiếp theo.
+            # Không lấy nhầm dữ liệu của section quiz kế tiếp.
             if tag in {"h1", "h2"}:
                 break
 
-            if tag in {"pre", "ol", "p"}:
-                if node.get_text(" ", strip=True):
-                    return node
+            if tag not in {"pre", "ol", "p"}:
+                continue
+
+            text = html.unescape(
+                node.get_text("\n", strip=True)
+            )
+
+            if not text.strip():
+                continue
+
+            if first_element is None:
+                first_element = node
+
+            # Trường hợp mới: EN và RU nằm trong hai P riêng.
+            if tag == "p":
+                first_line = text.splitlines()[0].strip()
+
+                match = re.fullmatch(
+                    r"\(?\s*(english|en|russian|ru)\s*"
+                    r"(?:ver(?:sion)?\.?)?\s*\)?\s*:?\s*",
+                    first_line,
+                    flags=re.I,
+                )
+
+                if match:
+                    language = match.group(1).lower()
+
+                    languages.add(
+                        "en"
+                        if language in {"english", "en"}
+                        else "ru"
+                    )
+
+                    language_blocks.append(text)
+
+        if languages == {"en", "ru"}:
+            # Ghép thành PRE để hàm extract_pre_lines() xử lý.
+            combined = soup.new_tag("pre")
+            combined.string = "\n\n".join(language_blocks)
+            return combined
+
+        # Giữ cách xử lý cũ cho PRE, OL hoặc một P chứa cả EN/RU.
+        return first_element
 
     return None
 
