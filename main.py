@@ -1040,6 +1040,12 @@ def extract_money_bux_codes(content_html):
     ]
 
 def find_city_combo_element(soup):
+    label_pattern = re.compile(
+        r"^\(?\s*(english|en|russian|ru)\s*"
+        r"(?:ver(?:sion)?\.?)?\s*\)?\s*:?\s*$",
+        flags=re.I,
+    )
+
     for h2 in soup.find_all("h2"):
         heading = html.unescape(
             h2.get_text(" ", strip=True)
@@ -1049,58 +1055,100 @@ def find_city_combo_element(soup):
             continue
 
         first_element = None
-        language_blocks = []
-        languages = set()
+        current_language = None
+        found_label = False
+        groups = {"en": [], "ru": []}
 
         for node in h2.next_elements:
             tag = getattr(node, "name", None)
 
-            # Không lấy nhầm dữ liệu của section quiz kế tiếp.
+            # Dừng trước section tiếp theo.
             if tag in {"h1", "h2"}:
                 break
 
-            if tag not in {"pre", "ol", "p"}:
+            if tag not in {"pre", "ol", "ul", "p"}:
                 continue
 
-            text = html.unescape(
-                node.get_text("\n", strip=True)
-            )
+            # Không đọc lặp các phần tử nằm trong khối đã xử lý.
+            if node.find_parent(["pre", "ol", "ul", "p"]):
+                continue
 
-            if not text.strip():
+            if not node.get_text(" ", strip=True):
                 continue
 
             if first_element is None:
                 first_element = node
 
-            # Trường hợp mới: EN và RU nằm trong hai P riêng.
-            if tag == "p":
-                first_line = text.splitlines()[0].strip()
-
-                match = re.fullmatch(
-                    r"\(?\s*(english|en|russian|ru)\s*"
-                    r"(?:ver(?:sion)?\.?)?\s*\)?\s*:?\s*",
-                    first_line,
-                    flags=re.I,
+            if tag in {"ol", "ul"}:
+                lines = [
+                    f"{i}. {normalize_answer(li.get_text(' ', strip=True))}"
+                    for i, li in enumerate(
+                        node.find_all("li", recursive=False),
+                        start=1,
+                    )
+                    if normalize_answer(li.get_text(" ", strip=True))
+                ]
+            else:
+                text = html.unescape(
+                    node.get_text("\n", strip=True)
                 )
+                lines = [
+                    normalize_answer(line)
+                    for line in text.splitlines()
+                    if normalize_answer(line)
+                ]
+
+            # Nhãn có thể nằm riêng hoặc chung với đáp án.
+            block_has_label = any(
+                label_pattern.fullmatch(line)
+                for line in lines
+            )
+
+            for line in lines:
+                match = label_pattern.fullmatch(line)
 
                 if match:
-                    language = match.group(1).lower()
+                    found_label = True
+                    name = match.group(1).lower()
+                    current_language = (
+                        "en" if name in {"english", "en"} else "ru"
+                    )
+                    continue
 
-                    languages.add(
-                        "en"
-                        if language in {"english", "en"}
-                        else "ru"
+                if not current_language:
+                    continue
+
+                # Lấy danh sách, dòng đánh số hoặc dòng có dấu ✅.
+                # PRE và P chứa nhãn vẫn hỗ trợ format cũ.
+                if (
+                    tag in {"pre", "ol", "ul"}
+                    or block_has_label
+                    or re.match(r"^(?:\d+\s*[.)-]?\s+|✅\s*)", line)
+                    or is_waiting_content([line])
+                ):
+                    groups[current_language].append(line)
+
+        if any(groups.values()):
+            blocks = []
+
+            for language, label in [
+                ("en", "(English Version)"),
+                ("ru", "(Russian Version)"),
+            ]:
+                if groups[language]:
+                    blocks.append(
+                        "\n".join([label] + groups[language])
                     )
 
-                    language_blocks.append(text)
-
-        if languages == {"en", "ru"}:
-            # Ghép thành PRE để hàm extract_pre_lines() xử lý.
             combined = soup.new_tag("pre")
-            combined.string = "\n\n".join(language_blocks)
+            combined.string = "\n\n".join(blocks)
             return combined
 
-        # Giữ cách xử lý cũ cho PRE, OL hoặc một P chứa cả EN/RU.
+        # Có nhãn nhưng chưa có đáp án: không coi nhãn là combo.
+        if found_label:
+            return None
+
+        # Fallback cho format cũ không có nhãn ngôn ngữ.
         return first_element
 
     return None
