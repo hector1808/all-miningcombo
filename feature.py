@@ -391,14 +391,20 @@ def extract_wotd(content):
             theme = match.group(1).strip()
 
         match = re.search(
-            r"Date\s*:\s*(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})",
+            r"\bDate\s*:\s*"
+            r"(\d{4}[/-]\d{2}[/-]\d{2})"
+            r"\s*(?:to|[-–—])\s*"
+            r"(\d{4}[/-]\d{2}[/-]\d{2})",
             text,
             re.I,
         )
-
         if match:
-            start = datetime.fromisoformat(match.group(1)).date()
-            end = datetime.fromisoformat(match.group(2)).date()
+            start = datetime.fromisoformat(
+                match.group(1).replace("/", "-")
+            ).date()
+            end = datetime.fromisoformat(
+                match.group(2).replace("/", "-")
+            ).date()
 
         for mark in p.find_all("mark"):
             mark_text = clean(mark.get_text(" ", strip=True))
