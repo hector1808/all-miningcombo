@@ -1045,6 +1045,9 @@ def find_city_combo_element(soup):
         r"(?:ver(?:sion)?\.?)?\s*\)?\s*:?\s*$",
         flags=re.I,
     )
+    answer_pattern = re.compile(
+        r"^(?:\d+\s*[.)-]?\s+|✅\s*)"
+    )
 
     for h2 in soup.find_all("h2"):
         heading = html.unescape(
@@ -1062,14 +1065,14 @@ def find_city_combo_element(soup):
         for node in h2.next_elements:
             tag = getattr(node, "name", None)
 
-            # Dừng trước section tiếp theo.
+            # Không đọc tràn sang section tiếp theo.
             if tag in {"h1", "h2"}:
                 break
 
             if tag not in {"pre", "ol", "ul", "p"}:
                 continue
 
-            # Không đọc lặp các phần tử nằm trong khối đã xử lý.
+            # Không đọc lặp nội dung bên trong khối đã xử lý.
             if node.find_parent(["pre", "ol", "ul", "p"]):
                 continue
 
@@ -1080,13 +1083,20 @@ def find_city_combo_element(soup):
                 first_element = node
 
             if tag in {"ol", "ul"}:
+                items = [
+                    normalize_answer(
+                        li.get_text(" ", strip=True)
+                    )
+                    for li in node.find_all(
+                        "li", recursive=False
+                    )
+                ]
                 lines = [
-                    f"{i}. {normalize_answer(li.get_text(' ', strip=True))}"
-                    for i, li in enumerate(
-                        node.find_all("li", recursive=False),
+                    f"{i}. {item}"
+                    for i, item in enumerate(
+                        (item for item in items if item),
                         start=1,
                     )
-                    if normalize_answer(li.get_text(" ", strip=True))
                 ]
             else:
                 text = html.unescape(
@@ -1098,7 +1108,7 @@ def find_city_combo_element(soup):
                     if normalize_answer(line)
                 ]
 
-            # Nhãn có thể nằm riêng hoặc chung với đáp án.
+            # Nhãn có thể đứng riêng hoặc chung với đáp án.
             block_has_label = any(
                 label_pattern.fullmatch(line)
                 for line in lines
@@ -1109,22 +1119,26 @@ def find_city_combo_element(soup):
 
                 if match:
                     found_label = True
-                    name = match.group(1).lower()
+                    language = match.group(1).lower()
                     current_language = (
-                        "en" if name in {"english", "en"} else "ru"
+                        "en"
+                        if language in {"english", "en"}
+                        else "ru"
                     )
                     continue
 
                 if not current_language:
                     continue
 
-                # Lấy danh sách, dòng đánh số hoặc dòng có dấu ✅.
-                # PRE và P chứa nhãn vẫn hỗ trợ format cũ.
+                # Không để thông báo chờ của RU làm mất
+                # đáp án EN hợp lệ, hoặc ngược lại.
+                if is_waiting_content([line]):
+                    continue
+
                 if (
                     tag in {"pre", "ol", "ul"}
                     or block_has_label
-                    or re.match(r"^(?:\d+\s*[.)-]?\s+|✅\s*)", line)
-                    or is_waiting_content([line])
+                    or answer_pattern.match(line)
                 ):
                     groups[current_language].append(line)
 
@@ -1137,18 +1151,20 @@ def find_city_combo_element(soup):
             ]:
                 if groups[language]:
                     blocks.append(
-                        "\n".join([label] + groups[language])
+                        "\n".join(
+                            [label] + groups[language]
+                        )
                     )
 
             combined = soup.new_tag("pre")
             combined.string = "\n\n".join(blocks)
             return combined
 
-        # Có nhãn nhưng chưa có đáp án: không coi nhãn là combo.
+        # Có nhãn nhưng chưa có đáp án hợp lệ.
         if found_label:
             return None
 
-        # Fallback cho format cũ không có nhãn ngôn ngữ.
+        # Giữ cách xử lý format cũ không có nhãn.
         return first_element
 
     return None
