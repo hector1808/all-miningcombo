@@ -7,6 +7,9 @@ from zoneinfo import ZoneInfo
 import requests
 from bs4 import BeautifulSoup
 
+import importlib.util
+from pathlib import Path
+
 
 # =========================================================
 # CONFIG
@@ -23,6 +26,155 @@ WOTD_SOURCE = "https://miningcombo.com/wp-json/wp/v2/pages/25514"
 
 RED_PACKET_POST_ID = 340688
 RED_PACKET_SOURCE = "https://miningcombo.com/wp-json/wp/v2/pages/26104"
+
+LATEST_NEWS_POSTS = [
+    {
+        "enabled": True,
+        "post_id": DROPEE_POST_ID,
+        "game_key": "dropee_question",
+        "game_name": "Dropee Question of the Day",
+    },
+    {
+        "enabled": False,
+        "post_id": WOTD_POST_ID,
+        "game_key": "binance_wotd",
+        "game_name": "Binance Word of the Day (WOTD)",
+    },
+    {
+        "enabled": False,
+        "post_id": RED_PACKET_POST_ID,
+        "game_key": "binance_red_packet",
+        "game_name": "Binance Red Packet",
+    },
+]
+
+def load_latest_news_helpers():
+    module_path = Path(__file__).resolve().with_name(
+        "img-quiz.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "feature_latest_news_helpers",
+        module_path,
+    )
+
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Cannot load img-quiz.py helpers.")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def update_latest_news_posts():
+    run_date = today().isoformat()
+    helpers = None
+
+    for settings in LATEST_NEWS_POSTS:
+        if not settings.get("enabled", False):
+            continue
+
+        game_key = settings["game_key"]
+        post_id = settings["post_id"]
+
+        try:
+            post = get_wp_post(post_id)
+            content = post.get("content", {}).get("raw", "")
+
+            if not content:
+                raise RuntimeError("Post content is empty.")
+
+            soup = BeautifulSoup(content, "html.parser")
+            targets = soup.find_all(
+                "div",
+                id="latest-news-area",
+            )
+
+            if len(targets) != 1:
+                raise RuntimeError(
+                    "Expected exactly one "
+                    "#latest-news-area in the post."
+                )
+
+            target = targets[0]
+
+            # Đã lưu news hôm nay thì không gọi GPT nữa.
+            if target.get("data-updated-date") == run_date:
+                print(
+                    f"Latest news {game_key}: "
+                    f"already updated for {run_date}."
+                )
+                continue
+
+            if helpers is None:
+                helpers = load_latest_news_helpers()
+
+            news_html = helpers.generate_latest_news(
+                cfg={"timezone": str(TZ)},
+                defaults={},
+                game_cfg={
+                    "game_key": game_key,
+                    "game_name": settings["game_name"],
+                    "latest_news_model": settings.get(
+                        "latest_news_model",
+                        "gpt-5-nano-2025-08-07",
+                    ),
+                },
+            )
+
+            if not news_html.strip():
+                raise RuntimeError("Generated news is empty.")
+
+            # Đọc lại bài sau khi GPT chạy để giữ các
+            # thay đổi nội dung vừa được lưu trong thời gian đó.
+            post = get_wp_post(post_id)
+            content = post.get("content", {}).get("raw", "")
+
+            if not content:
+                raise RuntimeError("Post content is empty.")
+
+            soup = BeautifulSoup(content, "html.parser")
+            targets = soup.find_all(
+                "div",
+                id="latest-news-area",
+            )
+
+            if len(targets) != 1:
+                raise RuntimeError(
+                    "Expected exactly one "
+                    "#latest-news-area in the post."
+                )
+
+            target = targets[0]
+
+            # Một lượt chạy khác có thể vừa cập nhật xong.
+            if target.get("data-updated-date") == run_date:
+                print(
+                    f"Latest news {game_key}: "
+                    "already saved by another run."
+                )
+                continue
+
+            fragment = BeautifulSoup(
+                news_html,
+                "html.parser",
+            )
+
+            target.clear()
+            for node in list(fragment.contents):
+                target.append(node)
+
+            target["data-updated-date"] = run_date
+
+            update_wp_post(post_id, str(soup))
+
+            print(
+                f"Latest news {game_key}: "
+                f"updated for {run_date}."
+            )
+
+        except Exception as exc:
+            # Một bài lỗi không làm dừng các bài khác.
+            print(f"ERROR latest news {game_key}: {exc}")
 
 
 # =========================================================
@@ -1405,9 +1557,10 @@ def main():
         return
 
     tasks = [
-        # ("Dropee", update_dropee),
+        ("Dropee", update_dropee),
         ("Binance WOTD", update_wotd),
         ("Binance Red Packet", update_red_packet),
+        ("Latest News", update_latest_news_posts),
     ]
 
     for name, task in tasks:
