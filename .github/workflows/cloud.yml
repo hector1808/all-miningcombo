@@ -103,6 +103,7 @@ jobs:
           RUN_MODE: update
           WP_USERNAME: ${{ secrets.WP_USERNAME }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: python feature.py
 
       - name: Run image quiz update
