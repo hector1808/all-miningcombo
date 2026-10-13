@@ -116,7 +116,7 @@ def update_latest_news_posts():
                     "game_name": settings["game_name"],
                     "latest_news_model": settings.get(
                         "latest_news_model",
-                        "gpt-5-nano-2025-08-07",
+                        "gpt-6-luna",
                     ),
                 },
             )
