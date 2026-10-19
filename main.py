@@ -1379,6 +1379,17 @@ def extract_city_quiz_ru(soup):
             )
 
             for line in raw.splitlines():
+                # Chuẩn hóa số emoji:
+                # 1️⃣ → 1, 2️⃣ → 2, ... 🔟 → 10.
+                line = (
+                    line.replace("🔟", "10")
+                    .replace("\ufe0f", "")
+                    .replace("\u20e3", "")
+                )
+
+                match = pattern.match(line)
+
+            for line in raw.splitlines():
                 match = pattern.match(line)
 
                 if not match:
@@ -3101,6 +3112,15 @@ def update_game_post(cfg, ws, game_cfg):
                 and previous_combo_check
                 and current_combo_check != previous_combo_check
             )
+
+        print(
+            "City Holder combo check: "
+            f"target_date={date_str}, "
+            f"source_date={source_local.date() if source_local else None}, "
+            f"day_difference={day_difference}, "
+            f"parsed_combo_lines={len(answer_data.get('combo_lines', []))}, "
+            f"combo_is_new={combo_is_new}"
+        )
 
         if not combo_is_new:
             current_city_data = extract_city_holder_data(
