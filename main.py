@@ -1252,91 +1252,40 @@ def extract_city_quiz_date(soup):
     return None
 
 
-def extract_city_quiz_en(soup):
+def extract_city_quiz_answers(soup, russian=False):
+    number_pattern = re.compile(
+        r"^\s*(\d{1,2})"
+        r"(?:\s*[.)：:–—-]\s*|\s+)"
+        r"(.+?)\s*$"
+    )
+
     for h2 in soup.find_all("h2"):
         heading = normalize_answer(
             h2.get_text(" ", strip=True)
         ).lower()
 
-        if heading != "city holder daily quiz answer":
+        if "city holder daily quiz answer" not in heading:
             continue
 
-        for sibling in h2.next_siblings:
-            tag = getattr(sibling, "name", None)
+        is_russian_section = "for russia" in heading
 
-            if tag == "h2":
-                break
-
-            # Trường hợp source dùng <ol><li>
-            if tag == "ol":
-                answers = [
-                    normalize_answer(
-                        li.get_text(" ", strip=True)
-                    )
-                    for li in sibling.find_all(
-                        "li",
-                        recursive=False,
-                    )
-                    if normalize_answer(
-                        li.get_text(" ", strip=True)
-                    )
-                ]
-
-                if answers:
-                    return answers
-
-            # Trường hợp source dùng <p> + <br>
-            if tag == "p":
-                raw = html.unescape(
-                    sibling.get_text(
-                        "\n",
-                        strip=True,
-                    )
-                )
-
-                answers = []
-
-                for line in raw.splitlines():
-                    match = re.match(
-                        r"^\s*\d+\s*[.)-]?\s+(.+?)\s*$",
-                        line,
-                    )
-
-                    if match:
-                        answer = normalize_answer(
-                            match.group(1)
-                        )
-
-                        if answer:
-                            answers.append(answer)
-
-                if answers:
-                    return answers
-
-    return []
-
-def extract_city_quiz_ru(soup):
-    for h2 in soup.find_all("h2"):
-        heading = normalize_answer(
-            h2.get_text(" ", strip=True)
-        ).lower()
-
-        if "city holder daily quiz answer for russia" not in heading:
+        if is_russian_section != russian:
             continue
 
         section_nodes = []
 
-        # Duyệt cả bên trong các thẻ bọc, nhưng dừng trước H2 kế tiếp.
+        # Đọc xuyên qua các lớp blockquote/div.
+        # Dừng trước section tiếp theo.
         for node in h2.next_elements:
             tag = getattr(node, "name", None)
 
-            if tag == "h2":
+            if tag in {"h1", "h2"}:
                 break
 
-            if tag:
+            if tag in {"ol", "ul", "p", "pre"}:
                 section_nodes.append(node)
 
-        # 1. Ưu tiên danh sách OL/UL, bất kể nằm trong bao nhiêu lớp.
+        # Format cũ: danh sách OL/UL.
         for node in section_nodes:
             if node.name not in {"ol", "ul"}:
                 continue
@@ -1344,34 +1293,22 @@ def extract_city_quiz_ru(soup):
             answers = [
                 normalize_answer(li.get_text(" ", strip=True))
                 for li in node.find_all("li", recursive=False)
-                if normalize_answer(li.get_text(" ", strip=True))
             ]
+            answers = [answer for answer in answers if answer]
 
-            if answers:
+            if answers and not is_waiting_content(answers):
                 return answers
 
-        # 2. Fallback: đáp án đánh số trong P/PRE.
-        # Hỗ trợ:
-        # 1 Answer
-        # 1. Answer
-        # 1) Answer
-        # 1 - Answer
-        # Nhiều dòng trong một P hoặc mỗi đáp án ở một P riêng.
-        numbered_answers = {}
+        # Format P/PRE: số thường hoặc số emoji.
+        answers = []
         expected_number = 1
-
-        pattern = re.compile(
-            r"^\s*(\d{1,2})"
-            r"(?:\s*[.)：:–—-]\s*|\s+)"
-            r"(.+?)\s*$"
-        )
 
         for node in section_nodes:
             if node.name not in {"p", "pre"}:
                 continue
 
-            # Tránh đọc trùng nếu source có P nằm trong PRE.
-            if node.name == "p" and node.find_parent("pre"):
+            # Không đọc lặp nội dung trong khối đã xử lý.
+            if node.find_parent(["p", "pre", "ol", "ul"]):
                 continue
 
             raw = html.unescape(
@@ -1379,18 +1316,13 @@ def extract_city_quiz_ru(soup):
             )
 
             for line in raw.splitlines():
-                # Chuẩn hóa số emoji:
-                # 1️⃣ → 1, 2️⃣ → 2, ... 🔟 → 10.
                 line = (
                     line.replace("🔟", "10")
                     .replace("\ufe0f", "")
                     .replace("\u20e3", "")
                 )
 
-                match = pattern.match(line)
-
-            for line in raw.splitlines():
-                match = pattern.match(line)
+                match = number_pattern.match(line)
 
                 if not match:
                     continue
@@ -1398,21 +1330,33 @@ def extract_city_quiz_ru(soup):
                 number = int(match.group(1))
                 answer = normalize_answer(match.group(2))
 
-                if not answer:
+                if not answer or is_waiting_content([answer]):
                     continue
 
-                # Chỉ nhận chuỗi liên tục bắt đầu từ 1,
-                # tránh lấy nhầm các số trong phần giải thích.
+                # Chỉ nhận chuỗi liên tục từ 1.
                 if number != expected_number:
                     continue
 
-                numbered_answers[number] = answer
+                answers.append(answer)
                 expected_number += 1
 
-        if numbered_answers:
-            return list(numbered_answers.values())
+        return answers
 
     return []
+
+
+def extract_city_quiz_en(soup):
+    return extract_city_quiz_answers(
+        soup,
+        russian=False,
+    )
+
+
+def extract_city_quiz_ru(soup):
+    return extract_city_quiz_answers(
+        soup,
+        russian=True,
+    )
 
 def extract_city_combo_lines(soup):
     combo_element = find_city_combo_element(soup)
