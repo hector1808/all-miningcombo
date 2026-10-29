@@ -1139,6 +1139,13 @@ def find_city_combo_element(soup):
                     tag in {"pre", "ol", "ul"}
                     or block_has_label
                     or answer_pattern.match(line)
+                    # Format mới: tên công trình, không đánh số,
+                    # nằm trong paragraph sau nhãn ngôn ngữ.
+                    or (
+                        tag == "p"
+                        and current_language in {"en", "ru"}
+                        and len(lines) == 3
+                    )
                 ):
                     groups[current_language].append(line)
 
